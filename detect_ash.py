@@ -26,7 +26,7 @@ def get_moment():
 
 def get_filelist_from_path(moment, products):
     """
-    Busca archivos en un directorio que coincidan con un moment='YYYYjjjhhmm" 
+    Busca archivos en un directorio que coincidan con un momento='YYYYjjjhhmm" 
     y que contengan uno de los identificadores de 'products' en su nombre.
     """
     l2_path = Path("/data/output/abi/l2/fd")
@@ -76,7 +76,11 @@ if __name__ == "__main__":
     if not archivos:
         print("Error: No se encontró ningún archivo.")
         exit(-1)
-       
+
+    if len(archivos) != len(productos):
+        print(f"Error: Se encontraron {len(archivos)} archivos, pero se esperaban {len(productos)}.")
+        exit(-1)
+
     print(f"Se encontraron {len(archivos)} archivos:")
     for f in archivos:
         print(f)
@@ -96,20 +100,6 @@ if __name__ == "__main__":
                 datasets[prod] = Dataset(archivo_path, 'r')
                 break # Pasamos al siguiente archivo una vez que encontramos su producto
 
-    # --- Verificación de productos ---
-    # Comprobamos si todos los productos solicitados se encontraron y abrieron.
-    productos_requeridos = set(productos)
-    productos_encontrados = set(datasets.keys())
-    productos_faltantes = productos_requeridos - productos_encontrados
-
-    if productos_faltantes:
-        print(f"\nError: Faltan archivos para los siguientes productos: {', '.join(sorted(list(productos_faltantes)))}")
-        # Cerramos los archivos que sí se lograron abrir antes de salir.
-        for ds in datasets.values():
-            ds.close()
-        exit(-1)
-
-    # Ahora puedes acceder a cada dataset por su nombre de producto
     print("\n¡Éxito! Todos los productos requeridos fueron encontrados y abiertos.")
     for producto, ds in datasets.items():
         print(f"  - {producto}: {ds.filepath()}")
