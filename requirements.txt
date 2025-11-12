@@ -1,0 +1,13 @@
+# Dependencias para LANOT_ceniza
+# Detección de ceniza volcánica del Popocatépetl
+
+# Procesamiento de imágenes y análisis de datos
+numpy>=1.24.0
+scipy>=1.10.0
+matplotlib>=3.7.0
+
+# Procesamiento de imágenes
+pillow>=10.0.0
+
+# Análisis científico
+pandas>=2.0.0
