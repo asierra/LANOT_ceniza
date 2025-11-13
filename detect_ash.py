@@ -3,6 +3,7 @@
 
 import datetime
 import numpy as np
+from scipy import ndimage
 from pathlib import Path
 from netCDF4 import Dataset
 from skyfield.api import utc
@@ -156,6 +157,53 @@ def get_sun_zenith_angle(lat_array, lon_array, image_time_dt):
     return sza_array
 
 
+def genera_media_dst(arreglo, kernel_size=5):
+    """
+    Calcula la media y la desviación estándar local (kernel) de un arreglo, ignorando NaNs.
+
+    Para la media, utiliza un método optimizado con uniform_filter para mayor rendimiento.
+    Para la desviación estándar, utiliza generic_filter con np.nanstd.
+
+    Args:
+        arreglo (np.ndarray): El arreglo de entrada, puede contener NaNs.
+        kernel_size (int): El tamaño de la ventana cuadrada para el cálculo.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: Una tupla conteniendo el arreglo de medias locales
+                                       y el arreglo de desviaciones estándar locales.
+    """
+    # --- Media (Método optimizado para manejar NaNs) ---
+    # 1. Copia del arreglo con NaNs reemplazados por 0
+    V = arreglo.copy()
+    V[np.isnan(V)] = 0
+    # 2. Suma local usando el filtro uniforme (muy rápido)
+    suma_local = ndimage.uniform_filter(V, size=kernel_size, mode='constant', cval=0) * (kernel_size**2)
+
+    # 3. Arreglo para contar los elementos no-NaN en la ventana
+    N = np.ones(arreglo.shape)
+    N[np.isnan(arreglo)] = 0
+    # 4. Conteo local de elementos no-NaN
+    conteo_local = ndimage.uniform_filter(N, size=kernel_size, mode='constant', cval=0) * (kernel_size**2)
+    
+    # 5. Calcular la media, evitando división por cero
+    kernel_media = np.divide(suma_local, conteo_local, where=conteo_local!=0, out=np.full(arreglo.shape, np.nan))
+
+    # --- Desviación Estándar (usando generic_filter) ---
+    kernel_std = ndimage.generic_filter(
+        arreglo, 
+        np.nanstd, 
+        size=kernel_size,
+        mode='constant',
+        cval=np.nan
+    )
+
+    print(f"\n--- Resultados del Kernel ({kernel_size}x{kernel_size}) ---")
+    print(f"Forma del array de Media: {kernel_media.shape}")
+    print(f"Forma del array de Desv. Estándar: {kernel_std.shape}")
+
+    return kernel_media, kernel_std
+
+
 if __name__ == "__main__":
     # Esta función obtiene el momento más reciente en formato 'YYYYjjjhhmm'
     ahora = get_moment();
@@ -217,4 +265,11 @@ if __name__ == "__main__":
     print("Fecha y hora ", image_time_dt.strftime("%Y-%m-%d %H:%M:%S UTC"))
     sza = get_sun_zenith_angle(lat, lon, image_time_dt)
 
+    mask_noche = sza > 85
+    print("\nMáscara SZA > 85 (Sol Bajo):\n", mask_noche)
+    mask_dia = sza < 70
+    print("\nMáscara SZA < 70 (Sol Alto):\n", mask_dia)
+    mask_penumbra = (sza >= 70) & (sza <= 85)
+    print("\nMáscara 70 <= SZA <= 85 (Intermedio):\n", mask_penumbra)
 
+    media, dst = genera_media_dst(delta1, kernel_size=5)
