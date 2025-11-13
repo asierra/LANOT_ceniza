@@ -12,17 +12,46 @@ from netCDF4 import num2date # Utilidad para convertir el tiempo de netCDF
 
 def get_moment(is_conus=True):
     """
-    Calcula la hora más reciente con minutos en múltiplos de 10
-    o que terminen en 1 o 6
+    Calcula la fecha y hora más reciente según el tipo de producto:
+    - Si is_conus=True: minutos terminados en 1 o 6 (ej: 01, 06, 11, 16, 21, 26, 31, 36, 41, 46, 51, 56)
+    - Si is_conus=False: minutos en múltiplos de 10 (ej: 00, 10, 20, 30, 40, 50)
     """
     # Obtener la hora actual en UTC 
     ahora_utc = datetime.datetime.now(datetime.timezone.utc)
 
-    # Calcular los minutos redondeados al múltiplo de 10 más reciente (hacia abajo)
-    minuto_redondeado = (ahora_utc.minute // 10) * 10
+    if is_conus:
+        # Para CONUS: minutos terminados en 1 o 6
+        minuto_actual = ahora_utc.minute
+        
+        # Encontrar el minuto más reciente terminado en 1 o 6
+        # Primero calculamos el minuto base (múltiplo de 5 más cercano hacia abajo)
+        base = (minuto_actual // 5) * 5
+        
+        # Determinamos cuál es el minuto válido más reciente
+        if base % 10 == 0:  # base termina en 0 (ej: 0, 10, 20, 30, 40, 50)
+            # El más reciente terminado en 1 o 6 sería base + 1 si no hemos pasado,
+            # o base - 4 (el terminado en 6 anterior)
+            if minuto_actual >= base + 1:
+                minuto_redondeado = base + 1
+            else:
+                minuto_redondeado = base - 4 if base >= 4 else 56
+                if minuto_redondeado == 56 and base < 4:
+                    # Retroceder una hora
+                    ahora_utc = ahora_utc.replace(hour=ahora_utc.hour - 1 if ahora_utc.hour > 0 else 23)
+                    if ahora_utc.hour == 23:
+                        ahora_utc = ahora_utc - datetime.timedelta(days=1)
+        else:  # base termina en 5 (ej: 5, 15, 25, 35, 45, 55)
+            # El más reciente terminado en 1 o 6 sería base + 1 (terminado en 6) si no hemos pasado,
+            # o base - 4 (el terminado en 1)
+            if minuto_actual >= base + 1:
+                minuto_redondeado = base + 1
+            else:
+                minuto_redondeado = base - 4
+    else:
+        # Para Full Disk: múltiplos de 10
+        minuto_redondeado = (ahora_utc.minute // 10) * 10
 
     # Crear el nuevo objeto datetime con los minutos ajustados
-    # También reiniciamos segundos y microsegundos para estar exactamente en esa marca
     dt_ajustado = ahora_utc.replace(minute=minuto_redondeado, second=0, microsecond=0)  
 
     # Formatear la fecha al formato deseado: "YYYYjjjhhmm"
@@ -74,7 +103,7 @@ def get_filelist_from_path(moment, products):
 
 def get_sun_zenith_angle(lat_array, lon_array, image_time_dt):
     """
-    Calcula el ángulo cenital solar para cada punto de una grilla lat/lon.
+    Calcula el ángulo cenital solar para cada punto de un arreglo lat/lon.
     
     Skyfield no maneja bien arrays grandes, así que calculamos la posición
     del Sol (RA/Dec) una sola vez y luego usamos geometría esférica para
@@ -133,14 +162,15 @@ def get_sun_zenith_angle(lat_array, lon_array, image_time_dt):
 
 
 if __name__ == "__main__":
+    # Esta función obtiene el momento más reciente en formato 'YYYYjjjhhmm'
     ahora = get_moment();
+    print(f"Momento: {ahora}")
     ahora = "20253161601"
     productos = ["ACTP", "C04", "C07", "C11", "C13", "C14", "C15", "NAV"]
     archivos = get_filelist_from_path(ahora, productos)
     if not archivos:
         print("Error: No se encontró ningún archivo.")
         exit(-1)
-
     if len(archivos) != len(productos):
         print(f"Error: Se encontraron {len(archivos)} archivos, pero se esperaban {len(productos)}.")
         exit(-1)
@@ -160,23 +190,18 @@ if __name__ == "__main__":
                 print(f"Abriendo {prod} desde: {archivo_path}")
                 datasets[prod] = Dataset(archivo_path, 'r')
                 break # Pasamos al siguiente archivo una vez que encontramos su producto
-
     print("\n¡Éxito! Todos los productos requeridos fueron encontrados y abiertos.")
    
-    # Asignando los datasets a variables individuales para un acceso más directo.
+    # Asignamos los datasets a variables individuales para un acceso directo.
     print("\nExtrayendo los arrays de datos de cada producto...")
+    # Tanto fd como conus tienen huecos, los llenamos con NaN para evitar problemas.
     phase = datasets["ACTP"].variables['Phase'][:]
-    c04 = datasets["C04"].variables['CMI'][:]
-    c07 = datasets["C07"].variables['CMI'][:]
-    c11 = datasets["C11"].variables['CMI'][:]
-    c13 = datasets["C13"].variables['CMI'][:]
-    c14 = datasets["C14"].variables['CMI'][:]
-    c15 = datasets["C15"].variables['CMI'][:]
-    # --- Solución al problema de Broadcasting en Skyfield ---
-    # Los arrays de lat/lon de los archivos NetCDF son MaskedArrays.
-    # Skyfield no puede manejar la máscara, causando el ValueError.
-    # La solución es convertir los MaskedArrays a arrays de NumPy estándar,
-    # reemplazando los valores enmascarados con NaN (Not a Number).
+    c04 = datasets["C04"].variables['CMI'][:].filled(np.nan)
+    c07 = datasets["C07"].variables['CMI'][:].filled(np.nan)
+    c11 = datasets["C11"].variables['CMI'][:].filled(np.nan)
+    c13 = datasets["C13"].variables['CMI'][:].filled(np.nan)
+    c14 = datasets["C14"].variables['CMI'][:].filled(np.nan)
+    c15 = datasets["C15"].variables['CMI'][:].filled(np.nan)
     lat = datasets["NAV"].variables['Latitude'][:].filled(np.nan)
     lon = datasets["NAV"].variables['Longitude'][:].filled(np.nan)
     
