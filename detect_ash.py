@@ -2,25 +2,26 @@
 # -*- coding: utf-8 -*-
 
 import datetime
+import numpy as np
 from pathlib import Path
 from netCDF4 import Dataset
-import numpy as np
 from skyfield.api import utc
 from skyfield.api import Topos, load
-from netCDF4 import num2date # Utilidad para convertir el tiempo de netCDF
+from netCDF4 import num2date 
 
+
+# Ruta al directorio de datos L2
+l2_path = Path("/data/output/abi/l2/conus")
 
 def get_moment(is_conus=True):
     """
-    Calcula la fecha y hora más reciente según el tipo de producto:
-    - Si is_conus=True: minutos terminados en 1 o 6 (ej: 01, 06, 11, 16, 21, 26, 31, 36, 41, 46, 51, 56)
-    - Si is_conus=False: minutos en múltiplos de 10 (ej: 00, 10, 20, 30, 40, 50)
+    Calcula la fecha y hora más reciente según el dominio:
+    - Si conus: minutos terminados en 1 o 6 (01, 06, 11, 16, 21, 26, 31, 36, 41, 46, 51, 56)
+    - Si full disk: minutos múltiplos de 10 (00, 10, 20, 30, 40, 50)
     """
-    # Obtener la hora actual en UTC 
     ahora_utc = datetime.datetime.now(datetime.timezone.utc)
 
     if is_conus:
-        # Para CONUS: minutos terminados en 1 o 6
         minuto_actual = ahora_utc.minute
         
         # Encontrar el minuto más reciente terminado en 1 o 6
@@ -54,40 +55,34 @@ def get_moment(is_conus=True):
     # Crear el nuevo objeto datetime con los minutos ajustados
     dt_ajustado = ahora_utc.replace(minute=minuto_redondeado, second=0, microsecond=0)  
 
-    # Formatear la fecha al formato deseado: "YYYYjjjhhmm"
+    # Formatear la fecha al formato "YYYYjjjhhmm"
     moment = dt_ajustado.strftime("%Y%j%H%M")
     return moment
 
 
 def get_filelist_from_path(moment, products):
     """
-    Busca archivos en un directorio que coincidan con un momento='YYYYjjjhhmm" 
+    Busca archivos en un directorio que coincidan con un momento 'YYYYjjjhhmm" 
     y que contengan uno de los identificadores de 'products' en su nombre.
     """
-    l2_path = Path("/data/output/abi/l2/conus")
     
-    # 1. Modificamos el patrón para que use un comodín (wildcard) *.
-    #    Ahora buscará cualquier archivo que *comience* con "s{moment}".
     patron_base = f"*s{moment}*.nc"
 
     print(f"Buscando archivos en: {l2_path}")
     print(f"Usando patrón base: {patron_base}")
     print(f"Filtrando por productos: {products}")
 
-    lista_archivos = [] # Inicializar como lista vacía
+    lista_archivos = [] 
 
     # Comprobar si el directorio existe antes de buscar
     if not l2_path.is_dir():
         print(f"Error: El directorio '{l2_path}' no existe. Por favor, comprueba la ruta.")
-        # Se devolverá la lista vacía definida arriba
+        # Se devolverá la lista vacía
     else:
-        # 2. Obtenemos *todos* los archivos que coinciden con el tiempo (patrón base)
+        # Obtenemos *todos* los archivos que coinciden con el tiempo (patrón base)
         archivos_por_tiempo = l2_path.glob(patron_base)
         
-        # 3. Filtramos la lista
-        # Iteramos sobre cada archivo encontrado (objeto Path 'p')
-        # y nos quedamos solo con aquellos cuyo nombre (p.name)
-        # contenga *alguno* de los strings en la lista 'products' con una lógica especial.
+        # Filtramos la lista
         lista_archivos = [
             str(p) for p in archivos_por_tiempo 
             if any(
@@ -165,11 +160,11 @@ if __name__ == "__main__":
     # Esta función obtiene el momento más reciente en formato 'YYYYjjjhhmm'
     ahora = get_moment();
     print(f"Momento: {ahora}")
-    ahora = "20253161601"
+    ahora = "20253161601"  # Mis datos de prueba
     productos = ["ACTP", "C04", "C07", "C11", "C13", "C14", "C15", "NAV"]
     archivos = get_filelist_from_path(ahora, productos)
     if not archivos:
-        print("Error: No se encontró ningún archivo.")
+        print(f"Error: No se encontró ningún archivo con este momento {ahora}.")
         exit(-1)
     if len(archivos) != len(productos):
         print(f"Error: Se encontraron {len(archivos)} archivos, pero se esperaban {len(productos)}.")
@@ -205,6 +200,7 @@ if __name__ == "__main__":
     lat = datasets["NAV"].variables['Latitude'][:].filled(np.nan)
     lon = datasets["NAV"].variables['Longitude'][:].filled(np.nan)
     
+    # Obtenemos fecha y hora de estos datos
     time_var = datasets["C07"].variables['t']
     image_time_cft = num2date(time_var[0], time_var.units)
     # Convertimos el objeto cftime a un datetime estándar de Python.
@@ -220,3 +216,5 @@ if __name__ == "__main__":
 
     print("Fecha y hora ", image_time_dt.strftime("%Y-%m-%d %H:%M:%S UTC"))
     sza = get_sun_zenith_angle(lat, lon, image_time_dt)
+
+
