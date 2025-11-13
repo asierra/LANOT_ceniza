@@ -135,6 +135,7 @@ Ver archivo [LICENSE](LICENSE) para más detalles.
 
 ## Contacto
 
-Alejandro Aguilar Sierra, asierra@unam.mx
-Víctor Manuel Jiménez Escudero, ...
+- Alejandro Aguilar Sierra, asierra@unam.mx
+- Víctor Manuel Jiménez Escudero, ...
+
 Laboratorio Nacional de Observación de la Tierra (LANOT)
