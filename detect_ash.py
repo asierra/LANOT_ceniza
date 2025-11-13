@@ -273,3 +273,9 @@ if __name__ == "__main__":
     print("\nMáscara 70 <= SZA <= 85 (Intermedio):\n", mask_penumbra)
 
     media, dst = genera_media_dst(delta1, kernel_size=5)
+
+    ceniza = np.zeros_like(delta1, dtype=np.int8)
+
+    ceniza = np.where((delta1 < 0) & (delta1 - (media*dst) < -1), 1,
+                   np.where((delta1 < 1) & (delta1 - (media*dst) < -1), 2, 0))
+
