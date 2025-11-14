@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import argparse
 import datetime
+import xarray as xr
 import numpy as np
 from scipy import ndimage
 from pathlib import Path
-from netCDF4 import Dataset
 from skyfield.api import utc
 from skyfield.api import Topos, load
-from netCDF4 import num2date 
 
 
 # Ruta al directorio de datos L2
-l2_path = Path("/data/output/abi/l2/conus")
-
+l2_path = Path("/data/ceniza/2019/spring")
+ 
 def get_moment(is_conus=True):
     """
     Calcula la fecha y hora más reciente según el dominio:
@@ -61,7 +61,7 @@ def get_moment(is_conus=True):
     return moment
 
 
-def get_filelist_from_path(moment, products):
+def get_filelist_from_path(data_path, moment, products):
     """
     Busca archivos en un directorio que coincidan con un momento 'YYYYjjjhhmm" 
     y que contengan uno de los identificadores de 'products' en su nombre.
@@ -69,19 +69,19 @@ def get_filelist_from_path(moment, products):
     
     patron_base = f"*s{moment}*.nc"
 
-    print(f"Buscando archivos en: {l2_path}")
+    print(f"Buscando archivos en: {data_path}")
     print(f"Usando patrón base: {patron_base}")
     print(f"Filtrando por productos: {products}")
 
     lista_archivos = [] 
 
     # Comprobar si el directorio existe antes de buscar
-    if not l2_path.is_dir():
-        print(f"Error: El directorio '{l2_path}' no existe. Por favor, comprueba la ruta.")
+    if not data_path.is_dir():
+        print(f"Error: El directorio '{data_path}' no existe. Por favor, comprueba la ruta.")
         # Se devolverá la lista vacía
     else:
         # Obtenemos *todos* los archivos que coinciden con el tiempo (patrón base)
-        archivos_por_tiempo = l2_path.glob(patron_base)
+        archivos_por_tiempo = data_path.glob(patron_base)
         
         # Filtramos la lista
         lista_archivos = [
@@ -204,60 +204,86 @@ def genera_media_dst(arreglo, kernel_size=5):
     return kernel_media, kernel_std
 
 
-if __name__ == "__main__":
-    # Esta función obtiene el momento más reciente en formato 'YYYYjjjhhmm'
-    ahora = get_moment();
-    print(f"Momento: {ahora}")
-    ahora = "20253161601"  # Mis datos de prueba
+def main(data_path, moment, output_path):
+    """Función principal para ejecutar el proceso de detección de cenizas."""
+    print(f"Iniciando detección para el momento: {moment}")
+
     productos = ["ACTP", "C04", "C07", "C11", "C13", "C14", "C15", "NAV"]
-    archivos = get_filelist_from_path(ahora, productos)
+    archivos = get_filelist_from_path(data_path, moment, productos)
     if not archivos:
-        print(f"Error: No se encontró ningún archivo con este momento {ahora}.")
-        exit(-1)
+        print(f"Error: No se encontró ningún archivo con este momento {moment}.")
+        return
     if len(archivos) != len(productos):
         print(f"Error: Se encontraron {len(archivos)} archivos, pero se esperaban {len(productos)}.")
-        exit(-1)
-
+        return
+    
     print(f"Se encontraron los {len(archivos)} archivos requeridos.")
     
-    # Creamos un diccionario para almacenar los datasets abiertos.
-    datasets = {}
+    # Creamos un diccionario para almacenar las rutas de los archivos por producto.
+    file_paths = {}
     for archivo_path in archivos:
         # Identificamos a qué producto pertenece cada archivo
         for prod in productos:
             # La lógica debe coincidir con la de get_filelist_from_path
-            is_band_product = prod.startswith("C") and "CMIP" in archivo_path
-            is_other_product = not prod.startswith("C")
+            is_band_product = prod.startswith("C") and "CMIP" in str(archivo_path) and prod in str(archivo_path)
+            is_other_product = not prod.startswith("C") and prod in str(archivo_path) 
 
-            if (is_band_product or is_other_product) and prod in archivo_path:
-                print(f"Abriendo {prod} desde: {archivo_path}")
-                datasets[prod] = Dataset(archivo_path, 'r')
+            if is_band_product or is_other_product:
+                print(f"Asociando {prod} con: {archivo_path}")
+                file_paths[prod] = archivo_path
                 break # Pasamos al siguiente archivo una vez que encontramos su producto
-    print("\n¡Éxito! Todos los productos requeridos fueron encontrados y abiertos.")
-   
-    # Asignamos los datasets a variables individuales para un acceso directo.
-    print("\nExtrayendo los arrays de datos de cada producto...")
-    # Tanto fd como conus tienen huecos, los llenamos con NaN para evitar problemas.
-    phase = datasets["ACTP"].variables['Phase'][:]
-    c04 = datasets["C04"].variables['CMI'][:].filled(np.nan)
-    c07 = datasets["C07"].variables['CMI'][:].filled(np.nan)
-    c11 = datasets["C11"].variables['CMI'][:].filled(np.nan)
-    c13 = datasets["C13"].variables['CMI'][:].filled(np.nan)
-    c14 = datasets["C14"].variables['CMI'][:].filled(np.nan)
-    c15 = datasets["C15"].variables['CMI'][:].filled(np.nan)
-    lat = datasets["NAV"].variables['Latitude'][:].filled(np.nan)
-    lon = datasets["NAV"].variables['Longitude'][:].filled(np.nan)
-    
-    # Obtenemos fecha y hora de estos datos
-    time_var = datasets["C07"].variables['t']
-    image_time_cft = num2date(time_var[0], time_var.units)
-    # Convertimos el objeto cftime a un datetime estándar de Python.
-    image_time_naive = datetime.datetime(image_time_cft.year, image_time_cft.month, image_time_cft.day, 
-                                      image_time_cft.hour, image_time_cft.minute, image_time_cft.second)
-    # Skyfield requiere un datetime "aware". Le asignamos la zona horaria UTC.
-    image_time_dt = image_time_naive.replace(tzinfo=utc)
+    print("\n¡Éxito! Todos los productos requeridos fueron encontrados.")
 
-    # Transmisividad
+    # Usamos xarray para abrir los archivos NetCDF
+    print("\nLeyendo datos con xarray...")
+    ds_c07 = xr.open_dataset(file_paths["C07"])
+    
+    # Obtener parámetros de proyección GOES desde el NetCDF
+    goes_proj = ds_c07['goes_imager_projection']
+    
+    # Construir el CRS usando el string Proj4 de GOES-16
+    from pyproj import CRS
+    proj_string = (f"+proj=geos +h={goes_proj.perspective_point_height} "
+                   f"+lon_0={goes_proj.longitude_of_projection_origin} "
+                   f"+sweep={goes_proj.sweep_angle_axis} "
+                   f"+a={goes_proj.semi_major_axis} "
+                   f"+b={goes_proj.semi_minor_axis} "
+                   f"+units=m +no_defs")
+    
+    crs_goes = CRS.from_proj4(proj_string)
+    
+    # Configurar geo_template con la información espacial
+    geo_template = ds_c07['CMI']
+    
+    # Obtener las coordenadas x e y para el geotransform
+    x_coords = ds_c07['x'].values * goes_proj.perspective_point_height
+    y_coords = ds_c07['y'].values * goes_proj.perspective_point_height
+    
+    # Configurar rioxarray con el CRS y las coordenadas espaciales
+    geo_template.rio.write_crs(crs_goes, inplace=True)
+    geo_template.rio.write_transform(inplace=True)
+
+    # Leemos las demás variables
+    c04 = xr.open_dataset(file_paths["C04"])['CMI'].data
+    c07 = ds_c07['CMI'].data
+    c11 = xr.open_dataset(file_paths["C11"])['CMI'].data
+    c13 = xr.open_dataset(file_paths["C13"])['CMI'].data
+    c14 = xr.open_dataset(file_paths["C14"])['CMI'].data
+    c15 = xr.open_dataset(file_paths["C15"])['CMI'].data
+    phase = xr.open_dataset(file_paths["ACTP"])['Phase'].data
+    
+    # Extraemos lat/lon para el cálculo del ángulo cenital solar
+    lat = xr.open_dataset(file_paths["NAV"])['Latitude'].data
+    lon = xr.open_dataset(file_paths["NAV"])['Longitude'].data
+
+    # Obtenemos fecha y hora de los datos desde el atributo time_coverage_start
+    # que está en formato ISO 8601
+    time_coverage_start = ds_c07.attrs['time_coverage_start']
+    # Parsear el string ISO 8601 a datetime
+    from dateutil.parser import parse
+    image_time_dt = parse(time_coverage_start).replace(tzinfo=utc)
+
+    # Diferencias de brillo y temperatura (BTD)
     delta1 = c13 - c15
     delta2 = c11 - c13
     delta3 = c07 - c13
@@ -265,22 +291,117 @@ if __name__ == "__main__":
     print("Fecha y hora ", image_time_dt.strftime("%Y-%m-%d %H:%M:%S UTC"))
     sza = get_sun_zenith_angle(lat, lon, image_time_dt)
 
+    # --- Clasificación de ceniza ---
+    # Máscaras de iluminación
     mask_noche = sza > 85
-    print("\nMáscara SZA > 85 (Sol Bajo):\n", mask_noche)
     mask_dia = sza < 70
-    print("\nMáscara SZA < 70 (Sol Alto):\n", mask_dia)
     mask_crepusculo = (sza >= 70) & (sza <= 85)
-    print("\nMáscara 70 <= SZA <= 85 (Intermedio):\n", mask_crepusculo)
 
+    # Cálculo de textura
     media, dst = genera_media_dst(delta1, kernel_size=5)
 
-    ceniza = np.zeros_like(delta1, dtype=np.int8)
-    ceniza_dia = np.zeros_like(delta1, dtype=np.int8)
-    ceniza_noche = np.zeros_like(delta1, dtype=np.int8)
-    ceniza_crepusculo = np.zeros_like(delta1, dtype=np.int8)
+    # Usando np.select para mayor claridad
+    cond_nhood = [
+        (delta1 < 0) & (delta1 - (media * dst) < -1),
+        (delta1 < 1) & (delta1 - (media * dst) < -1)
+    ]
+    val_nhood = [1, 2]
+    nhood = np.select(cond_nhood, val_nhood, default=0)
 
-    ceniza = np.where((delta1 < 0) & (delta1 - (media*dst) < -1), 1,
-                   np.where((delta1 < 1) & (delta1 - (media*dst) < -1), 2, 0))
+    # Clasificación inicial por iluminación
+    # Noche
+    cond_noche = [
+        ((delta1 < 0) & (delta2 > 0) & (delta3 > 2)) | (nhood == 1),
+        ((delta1 < 1) & (delta2 > -0.5) & (delta3 > 2)) | (nhood == 2)
+    ]
+    ceniza_noche = np.select(cond_noche, [1, 2], default=0)
 
-    ceniza_dia = np.where(mask_dia, np.nan, ceniza)
+    # Crepúsculo
+    cond_crepusculo = [
+        ((delta1 < 0) & (delta2 > 0) & (delta3 > 2)) | (nhood == 1),
+        ((delta1 < 1) & (delta2 > -0.5) & (delta3 > 2) & (c04 > 0.002) & (c13 < 273.15)) | (nhood == 2)
+    ]
+    ceniza_crepusculo = np.select(cond_crepusculo, [1, 2], default=0)
 
+    # Día
+    cond_dia = [
+        ((delta1 < 0) & (delta2 > 0) & (delta3 > 2)) | (nhood == 1),
+        ((delta1 < 1) & (delta2 > -0.5) & (delta3 > 2) & (c04 > 0.002)) | (nhood == 2)
+    ]
+    ceniza_dia = np.select(cond_dia, [1, 2], default=0)
+
+    # Combinar según la máscara de iluminación
+    ceniza_tiempo = np.select(
+        [mask_noche, mask_crepusculo, mask_dia],
+        [ceniza_noche, ceniza_crepusculo, ceniza_dia],
+        default=0
+    )
+
+    # Refinamiento de umbrales (usando np.select)
+    cond_um1 = [
+        (ceniza_tiempo == 2) & (delta2 >= -1.5),
+        (ceniza_tiempo == 2) & (delta2 < -1.5)
+    ]
+    val_um1 = [3, 0]
+    ceniza_um1 = np.select(cond_um1, val_um1, default=ceniza_tiempo)
+
+    cond_um2 = [
+        (ceniza_um1 <= 2) & (delta3 <= 0),
+        (ceniza_um1 >= 3) & (delta3 <= 1.5)
+    ]
+    ceniza_um2 = np.select(cond_um2, [0, 0], default=ceniza_um1)
+
+    # Clasificación final basada en fase de la nube
+    cond_final = [
+        (ceniza_um2 == 2) & (phase == 1), # Nube de agua
+        (ceniza_um2 == 2) & (phase == 4), # Polvo
+        (ceniza_um2 == 3) & (phase == 1), # Nube de agua
+        (ceniza_um2 == 3) & (phase >= 2)  # Hielo, etc.
+    ]
+    val_final = [4, 0, 5, 0]
+    ceniza = np.select(cond_final, val_final, default=ceniza_um2)
+
+    print("\n--- Clasificación Final de Ceniza ---")
+    print(f"Forma del array final: {ceniza.shape}")
+    print(f"Valores únicos en la clasificación: {np.unique(ceniza)}")
+
+    # --- Guardado en GeoTIFF ---
+    # Creamos un DataArray de xarray con el resultado, usando la plantilla geoespacial
+    output_da = xr.DataArray(
+        data=ceniza.astype(np.uint8),
+        coords=geo_template.coords,
+        dims=geo_template.dims,
+        name="ash_detection",
+        attrs={"long_name": "Ash Detection Classification", "units": "category"}
+    )
+    # Asignamos la información de proyección que rioxarray leyó
+    output_da.rio.write_crs(geo_template.rio.crs, inplace=True)
+
+    print(f"\nGuardando resultado en: {output_path}")
+    output_da.rio.to_raster(output_path, driver="GTiff", dtype="uint8", compress='LZW')
+    print("¡Archivo GeoTIFF guardado con éxito!")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Detecta ceniza volcánica a partir de datos GOES L2.")
+    parser.add_argument('--path', type=Path, default=l2_path, help=f"Ruta al directorio de datos L2. Por defecto: {l2_path}")
+    parser.add_argument('--moment', type=str, default=None, help="Momento a procesar en formato 'YYYYjjjHHMM'. Por defecto, se calcula el más reciente.")
+    parser.add_argument('--output', type=Path, default=None, help="Ruta del archivo GeoTIFF de salida. Por defecto, se genera un nombre basado en el momento.")
+    
+    args = parser.parse_args()
+
+    if args.moment:
+        moment_a_procesar = args.moment
+    else:
+        # Esta función obtiene el momento más reciente en formato 'YYYYjjjhhmm'
+        moment_a_procesar = get_moment()
+
+    if args.output:
+        output_file = args.output
+    else:
+        # Genera un nombre de archivo de salida por defecto
+        output_file = Path(f"./ceniza_{moment_a_procesar}.tif")
+
+    # Descomentar para pruebas con datos específicos
+    # moment_a_procesar = "20191001731"
+
+    main(args.path, moment_a_procesar, output_file)

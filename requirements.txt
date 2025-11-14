@@ -1,4 +1,5 @@
-netCDF4
 numpy
 skyfield
 scipy
+xarray
+rioxarray
