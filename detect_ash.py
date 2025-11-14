@@ -269,13 +269,18 @@ if __name__ == "__main__":
     print("\nMáscara SZA > 85 (Sol Bajo):\n", mask_noche)
     mask_dia = sza < 70
     print("\nMáscara SZA < 70 (Sol Alto):\n", mask_dia)
-    mask_penumbra = (sza >= 70) & (sza <= 85)
-    print("\nMáscara 70 <= SZA <= 85 (Intermedio):\n", mask_penumbra)
+    mask_crepusculo = (sza >= 70) & (sza <= 85)
+    print("\nMáscara 70 <= SZA <= 85 (Intermedio):\n", mask_crepusculo)
 
     media, dst = genera_media_dst(delta1, kernel_size=5)
 
     ceniza = np.zeros_like(delta1, dtype=np.int8)
+    ceniza_dia = np.zeros_like(delta1, dtype=np.int8)
+    ceniza_noche = np.zeros_like(delta1, dtype=np.int8)
+    ceniza_crepusculo = np.zeros_like(delta1, dtype=np.int8)
 
     ceniza = np.where((delta1 < 0) & (delta1 - (media*dst) < -1), 1,
                    np.where((delta1 < 1) & (delta1 - (media*dst) < -1), 2, 0))
+
+    ceniza_dia = np.where(mask_dia, np.nan, ceniza)
 
