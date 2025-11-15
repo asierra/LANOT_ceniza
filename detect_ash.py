@@ -215,7 +215,7 @@ def genera_media_dst(arreglo, kernel_size=5):
     return kernel_media, kernel_std
 
 
-def main(data_path, moment, output_path, nav_file=None, clip_region=None):
+def main(data_path, moment, output_path, clip_region=None):
     """Función principal para ejecutar el proceso de detección de cenizas."""
     print(f"Iniciando detección para el momento: {moment}")
     
@@ -242,11 +242,8 @@ def main(data_path, moment, output_path, nav_file=None, clip_region=None):
         bbox = None
 
     # Si se especifica un archivo NAV, no lo buscamos en el directorio
-    if nav_file:
-        productos = ["ACTP", "C04", "C07", "C11", "C13", "C14", "C15"]
-        print(f"Usando archivo NAV especificado: {nav_file}")
-    else:
-        productos = ["ACTP", "C04", "C07", "C11", "C13", "C14", "C15", "NAV"]
+    # NOTA: El archivo NAV ya no es necesario, se calculan lat/lon desde la proyección
+    productos = ["ACTP", "C04", "C07", "C11", "C13", "C14", "C15"]
     
     archivos = get_filelist_from_path(data_path, moment, productos)
     if not archivos:
@@ -272,11 +269,6 @@ def main(data_path, moment, output_path, nav_file=None, clip_region=None):
                 file_paths[prod] = archivo_path
                 break # Pasamos al siguiente archivo una vez que encontramos su producto
     
-    # Si se especificó un archivo NAV, lo agregamos al diccionario
-    if nav_file:
-        file_paths["NAV"] = str(nav_file)
-        print(f"Asociando NAV con: {nav_file}")
-    
     print("\n¡Éxito! Todos los productos requeridos fueron encontrados.")
 
     # Usamos xarray para abrir los archivos NetCDF
@@ -287,7 +279,7 @@ def main(data_path, moment, output_path, nav_file=None, clip_region=None):
     goes_proj = ds_c07['goes_imager_projection']
     
     # Construir el CRS usando el string Proj4 de GOES-16
-    from pyproj import CRS
+    from pyproj import CRS, Transformer
     from affine import Affine
     proj_string = (f"+proj=geos +h={goes_proj.perspective_point_height} "
                    f"+lon_0={goes_proj.longitude_of_projection_origin} "
@@ -298,12 +290,54 @@ def main(data_path, moment, output_path, nav_file=None, clip_region=None):
     
     crs_goes = CRS.from_proj4(proj_string)
     
+    # Obtener las coordenadas x e y completas
+    x_coords_full = ds_c07['x'].values * goes_proj.perspective_point_height
+    y_coords_full = ds_c07['y'].values * goes_proj.perspective_point_height
+    
+    # --- Determinar índices de recorte si se especificó una región ---
+    if bbox:
+        print(f"\nCalculando índices de recorte para región: {bbox}")
+        # bbox = [lon_min, lat_max, lon_max, lat_min]
+        lon_min, lat_max, lon_max, lat_min = bbox
+        
+        # Transformar coordenadas geográficas a proyección GOES
+        transformer_to_goes = Transformer.from_crs("EPSG:4326", crs_goes, always_xy=True)
+        x_min, y_min = transformer_to_goes.transform(lon_min, lat_min)
+        x_max, y_max = transformer_to_goes.transform(lon_max, lat_max)
+        
+        # Encontrar los índices más cercanos en los arrays de coordenadas
+        # Para x (columnas)
+        x_idx_min = np.argmin(np.abs(x_coords_full - x_min))
+        x_idx_max = np.argmin(np.abs(x_coords_full - x_max))
+        # Para y (filas) - recordar que y puede estar en orden descendente
+        y_idx_min = np.argmin(np.abs(y_coords_full - y_max))  # y_max corresponde al índice menor (arriba)
+        y_idx_max = np.argmin(np.abs(y_coords_full - y_min))  # y_min corresponde al índice mayor (abajo)
+        
+        # Asegurar orden correcto
+        if x_idx_min > x_idx_max:
+            x_idx_min, x_idx_max = x_idx_max, x_idx_min
+        if y_idx_min > y_idx_max:
+            y_idx_min, y_idx_max = y_idx_max, y_idx_min
+        
+        # Añadir 1 al índice máximo para incluir el píxel en el slice
+        x_slice = slice(x_idx_min, x_idx_max + 1)
+        y_slice = slice(y_idx_min, y_idx_max + 1)
+        
+        # Extraer las coordenadas recortadas
+        x_coords = x_coords_full[x_slice]
+        y_coords = y_coords_full[y_slice]
+        
+        print(f"Índices de recorte: y[{y_idx_min}:{y_idx_max+1}], x[{x_idx_min}:{x_idx_max+1}]")
+        print(f"Tamaño recortado: {len(y_coords)} x {len(x_coords)} píxeles")
+    else:
+        # Sin recorte, usar todo el dominio
+        x_coords = x_coords_full
+        y_coords = y_coords_full
+        x_slice = slice(None)
+        y_slice = slice(None)
+    
     # Configurar geo_template con la información espacial
     geo_template = ds_c07['CMI']
-    
-    # Obtener las coordenadas x e y para el geotransform
-    x_coords = ds_c07['x'].values * goes_proj.perspective_point_height
-    y_coords = ds_c07['y'].values * goes_proj.perspective_point_height
     
     # --- Construir la geotransformación manualmente ---
     # La geotransformación define cómo los píxeles se mapean a coordenadas espaciales.
@@ -317,18 +351,30 @@ def main(data_path, moment, output_path, nav_file=None, clip_region=None):
     # 3. Crear la matriz de transformación afín
     geotransform = Affine(x_res, 0.0, x_ul, 0.0, y_res, y_ul)
     
-    # Leemos las demás variables
-    c04 = xr.open_dataset(file_paths["C04"])['CMI'].data
-    c07 = ds_c07['CMI'].data
-    c11 = xr.open_dataset(file_paths["C11"])['CMI'].data
-    c13 = xr.open_dataset(file_paths["C13"])['CMI'].data
-    c14 = xr.open_dataset(file_paths["C14"])['CMI'].data
-    c15 = xr.open_dataset(file_paths["C15"])['CMI'].data
-    phase = xr.open_dataset(file_paths["ACTP"])['Phase'].data
+    # Leemos las demás variables, aplicando el recorte si es necesario
+    print("\nCargando datos de las bandas y productos...")
+    c04 = xr.open_dataset(file_paths["C04"])['CMI'].data[y_slice, x_slice]
+    c07 = ds_c07['CMI'].data[y_slice, x_slice]
+    c11 = xr.open_dataset(file_paths["C11"])['CMI'].data[y_slice, x_slice]
+    c13 = xr.open_dataset(file_paths["C13"])['CMI'].data[y_slice, x_slice]
+    c14 = xr.open_dataset(file_paths["C14"])['CMI'].data[y_slice, x_slice]
+    c15 = xr.open_dataset(file_paths["C15"])['CMI'].data[y_slice, x_slice]
+    phase = xr.open_dataset(file_paths["ACTP"])['Phase'].data[y_slice, x_slice]
     
-    # Extraemos lat/lon para el cálculo del ángulo cenital solar
-    lat = xr.open_dataset(file_paths["NAV"])['Latitude'].data
-    lon = xr.open_dataset(file_paths["NAV"])['Longitude'].data
+    print(f"Forma de los arrays cargados: {c07.shape}")
+    
+    # Calculamos lat/lon a partir de las coordenadas GOES x/y (ya recortadas)
+    # Creamos una malla 2D con las coordenadas x/y
+    x_2d, y_2d = np.meshgrid(x_coords, y_coords)
+    
+    # Transformar de proyección GOES a lat/lon (EPSG:4326)
+    transformer = Transformer.from_crs(crs_goes, "EPSG:4326", always_xy=True)
+    lon, lat = transformer.transform(x_2d, y_2d)
+    
+    print(f"\n--- Coordenadas calculadas ---")
+    print(f"Forma de lat/lon: {lat.shape}")
+    print(f"Rango de latitud: [{np.nanmin(lat):.2f}, {np.nanmax(lat):.2f}]")
+    print(f"Rango de longitud: [{np.nanmin(lon):.2f}, {np.nanmax(lon):.2f}]")
 
     # Obtenemos fecha y hora de los datos desde el atributo time_coverage_start
     # que está en formato ISO 8601
@@ -424,8 +470,8 @@ def main(data_path, moment, output_path, nav_file=None, clip_region=None):
     output_da = xr.DataArray(
         data=ceniza.astype(np.uint8), # Los datos de la clasificación
         coords={
-            'y': y_coords, # Las coordenadas Y en metros que calculamos
-            'x': x_coords  # Las coordenadas X en metros que calculamos
+            'y': y_coords, # Las coordenadas Y en metros que calculamos (ya recortadas)
+            'x': x_coords  # Las coordenadas X en metros que calculamos (ya recortadas)
         },
         dims=geo_template.dims,
         name="ash_detection",
@@ -435,64 +481,34 @@ def main(data_path, moment, output_path, nav_file=None, clip_region=None):
     output_da.rio.write_crs(crs_goes, inplace=True)
     output_da.rio.write_transform(geotransform, inplace=True)
 
-    # Aplicar recorte si se especificó una región
-    if bbox:
-        print(f"\nRecortando a región: {bbox}")
-        # bbox en formato [lon_min, lat_max, lon_max, lat_min]
-        # rio.clip_box espera (minx, miny, maxx, maxy) en el CRS del DataArray
-        # Como nuestro bbox está en coordenadas geográficas (lon/lat), 
-        # debemos transformar las coordenadas del bbox a la proyección GOES
-        from pyproj import Transformer
+    # Reproyectar a coordenadas geográficas si se especificó
+    if bbox and reproject_to_geo:
+        print("\nReproyectando a coordenadas geográficas (EPSG:4326)...")
         
-        # Crear transformador de lat/lon (EPSG:4326) a la proyección GOES
-        transformer = Transformer.from_crs("EPSG:4326", crs_goes, always_xy=True)
-        
-        # Transformar las esquinas del bbox
+        # Definir los límites en coordenadas geográficas
         # bbox = [lon_min, lat_max, lon_max, lat_min]
         lon_min, lat_max, lon_max, lat_min = bbox
         
-        # Transformar esquina inferior izquierda (lon_min, lat_min)
-        x_min, y_min = transformer.transform(lon_min, lat_min)
-        # Transformar esquina superior derecha (lon_max, lat_max)
-        x_max, y_max = transformer.transform(lon_max, lat_max)
+        # Calcular una resolución apropiada basada en el tamaño del recorte original
+        # Usamos aproximadamente el mismo número de píxeles
+        height, width = output_da.shape
         
-        print(f"Límites en coordenadas GOES: x=[{x_min:.2f}, {x_max:.2f}], y=[{y_min:.2f}, {y_max:.2f}]")
+        # Calcular resolución en grados
+        lon_range = lon_max - lon_min
+        lat_range = lat_max - lat_min
+        lon_res = lon_range / width
+        lat_res = lat_range / height
         
-        # Aplicar el recorte usando las coordenadas transformadas
-        output_da = output_da.rio.clip_box(
-            minx=x_min,
-            miny=y_min,
-            maxx=x_max,
-            maxy=y_max
+        print(f"Resolución objetivo: {lon_res:.6f}° (lon) x {lat_res:.6f}° (lat)")
+        
+        # Reproyectar usando rioxarray
+        output_da = output_da.rio.reproject(
+            dst_crs="EPSG:4326",
+            shape=(height, width),  # Mantener aproximadamente el mismo número de píxeles
+            resampling=0  # Nearest neighbor para datos categóricos
         )
-        print(f"Forma del array recortado: {output_da.shape}")
-        
-        # Reproyectar a coordenadas geográficas si se especificó
-        if reproject_to_geo:
-            print("\nReproyectando a coordenadas geográficas (EPSG:4326)...")
-            
-            # Definir los límites en coordenadas geográficas
-            # bbox = [lon_min, lat_max, lon_max, lat_min]
-            # Calcular una resolución apropiada basada en el tamaño del recorte original
-            # Usamos aproximadamente el mismo número de píxeles
-            height, width = output_da.shape
-            
-            # Calcular resolución en grados
-            lon_range = lon_max - lon_min
-            lat_range = lat_max - lat_min
-            lon_res = lon_range / width
-            lat_res = lat_range / height
-            
-            print(f"Resolución objetivo: {lon_res:.6f}° (lon) x {lat_res:.6f}° (lat)")
-            
-            # Reproyectar usando rioxarray
-            output_da = output_da.rio.reproject(
-                dst_crs="EPSG:4326",
-                shape=(height, width),  # Mantener aproximadamente el mismo número de píxeles
-                resampling=0  # Nearest neighbor para datos categóricos
-            )
-            print(f"Forma después de reproyección: {output_da.shape}")
-            print(f"CRS final: EPSG:4326 (lat/lon)")
+        print(f"Forma después de reproyección: {output_da.shape}")
+        print(f"CRS final: EPSG:4326 (lat/lon)")
 
     print(f"\nGuardando resultado en: {output_path}")
     output_da.rio.to_raster(output_path, driver="GTiff", dtype="uint8", compress='LZW')
@@ -503,7 +519,6 @@ if __name__ == "__main__":
     parser.add_argument('--path', type=Path, default=l2_path, help=f"Ruta al directorio de datos L2. Por defecto: {l2_path}")
     parser.add_argument('--moment', type=str, default=None, help="Momento a procesar en formato 'YYYYjjjHHMM'. Por defecto, se calcula el más reciente.")
     parser.add_argument('--output', type=Path, default=None, help="Ruta del archivo GeoTIFF de salida. Por defecto, se genera un nombre basado en el momento.")
-    parser.add_argument('--nav', type=Path, default=None, help="Ruta a un archivo NAV específico. Si se especifica, no se buscará en el directorio de datos.")
     parser.add_argument('--clip', type=str, choices=list(CLIP_REGIONS_WITH_GEO.keys()), default=None, 
                         help=f"Región para recortar el resultado final. Agrega 'geo' al final para reproyectar a lat/lon. Opciones: {', '.join(CLIP_REGIONS.keys())} (o con sufijo 'geo')")
     
@@ -524,4 +539,4 @@ if __name__ == "__main__":
     # Descomentar para pruebas con datos específicos
     # moment_a_procesar = "20191001731"
 
-    main(args.path, moment_a_procesar, output_file, nav_file=args.nav, clip_region=args.clip)
+    main(args.path, moment_a_procesar, output_file, clip_region=args.clip)

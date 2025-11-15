@@ -21,7 +21,8 @@ El sistema utiliza múltiples canales infrarrojos y productos derivados para:
 - **C13**: Canal 13 (10.3 μm) - Infrarrojo limpio
 - **C14**: Canal 14 (11.2 μm) - Infrarrojo de onda larga
 - **C15**: Canal 15 (12.3 μm) - Infrarrojo sucio
-- **NAV**: Navegación (Latitud/Longitud)
+
+**Nota:** Las coordenadas geográficas (latitud/longitud) se calculan automáticamente a partir de la proyección GOES, eliminando la necesidad del producto NAV.
 
 ## Instalación
 
@@ -63,13 +64,14 @@ El sistema utiliza múltiples canales infrarrojos y productos derivados para:
 ### Dependencias principales
 
 - **xarray**: Lectura y manipulación de datos NetCDF multidimensionales
-- **rioxarray**: Extensión de xarray para operaciones geoespaciales
+- **netcdf4**: Backend para lectura de archivos NetCDF
+- **rioxarray**: Extensión de xarray para operaciones geoespaciales y reproyección
 - **numpy**: Operaciones numéricas y manejo de arrays
 - **scipy**: Filtros y operaciones de procesamiento de imágenes (ndimage)
 - **skyfield**: Cálculos astronómicos precisos (posición del Sol, efemérides JPL)
-- **pyproj**: Transformaciones de sistemas de coordenadas y proyecciones
-- **dateutil**: Parsing de fechas en formato ISO 8601
-- **pathlib**: Manejo moderno de rutas de archivos
+- **pyproj**: Transformaciones de sistemas de coordenadas y proyecciones (GOES ↔ lat/lon)
+- **affine**: Geotransformaciones afines para georreferenciación
+- **python-dateutil**: Parsing de fechas en formato ISO 8601
 
 ## Uso
 
@@ -98,6 +100,37 @@ Especificar archivo de salida personalizado:
 - `--path`: Ruta al directorio que contiene los archivos NetCDF L2 (por defecto: `/data/ceniza/2019/spring`)
 - `--moment`: Momento a procesar en formato `YYYYjjjHHMM` (año, día juliano, hora y minuto). Si no se especifica, se calcula automáticamente el más reciente
 - `--output`: Ruta del archivo GeoTIFF de salida. Si no se especifica, se genera como `ceniza_[momento].tif`
+- `--clip`: Región para recortar el resultado. Opciones disponibles:
+  - `centromex`: Centro de México (proyección GOES nativa)
+  - `centromexgeo`: Centro de México (reproyectado a lat/lon EPSG:4326)
+  - `popocatepetl`: Región del Popocatépetl (proyección GOES nativa)
+  - `popocatepetlgeo`: Región del Popocatépetl (reproyectado a lat/lon EPSG:4326)
+
+### Ejemplos de uso
+
+**Procesamiento completo sin recorte:**
+```bash
+./detect_ash.py --path /data/ceniza/2019/spring --moment 20190871402
+```
+
+**Recorte a región específica (proyección GOES):**
+```bash
+./detect_ash.py --moment 20190871402 --clip centromex
+./detect_ash.py --moment 20190871402 --clip popocatepetl
+```
+
+**Recorte con reproyección a coordenadas geográficas:**
+```bash
+./detect_ash.py --moment 20190871402 --clip centromexgeo
+./detect_ash.py --moment 20190871402 --clip popocatepetlgeo --output popo_geo.tif
+```
+
+### Regiones de recorte predefinidas
+
+- **centromex**: [-107.23, 22.72, -93.84, 14.94] (lon_min, lat_max, lon_max, lat_min)
+- **popocatepetl**: [-100.26, 20.58, -96.85, 18.29]
+
+El recorte se realiza **antes** de procesar los datos, mejorando significativamente el rendimiento y reduciendo el uso de memoria.
 
 ### Salida
 
@@ -189,6 +222,17 @@ Los datos se procesan en la proyección geoestacionaria nativa GOES-16:
 - **Sistema de barrido**: Eje X
 
 La transformación geoespacial se preserva directamente desde los archivos NetCDF originales usando los atributos de la proyección `goes_imager_projection`.
+
+**Coordenadas lat/lon:** Se calculan automáticamente mediante transformación de la proyección GOES usando `pyproj`, eliminando la necesidad del archivo de navegación (NAV).
+
+**Recorte eficiente:** Cuando se especifica una región de recorte, el sistema:
+1. Transforma las coordenadas geográficas del bbox a coordenadas GOES
+2. Identifica los índices de píxeles correspondientes
+3. Carga únicamente el subconjunto de datos necesario
+4. Preserva la resolución y calidad original (sin interpolación)
+5. Opcionalmente reproyecta el resultado a EPSG:4326 (lat/lon) al final
+
+Este enfoque minimiza el uso de memoria y acelera significativamente el procesamiento.
 
 ## Notas técnicas
 
