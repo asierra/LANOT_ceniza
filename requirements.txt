@@ -3,3 +3,4 @@ skyfield
 scipy
 xarray
 rioxarray
+affine

@@ -204,11 +204,17 @@ def genera_media_dst(arreglo, kernel_size=5):
     return kernel_media, kernel_std
 
 
-def main(data_path, moment, output_path):
+def main(data_path, moment, output_path, nav_file=None):
     """Función principal para ejecutar el proceso de detección de cenizas."""
     print(f"Iniciando detección para el momento: {moment}")
 
-    productos = ["ACTP", "C04", "C07", "C11", "C13", "C14", "C15", "NAV"]
+    # Si se especifica un archivo NAV, no lo buscamos en el directorio
+    if nav_file:
+        productos = ["ACTP", "C04", "C07", "C11", "C13", "C14", "C15"]
+        print(f"Usando archivo NAV especificado: {nav_file}")
+    else:
+        productos = ["ACTP", "C04", "C07", "C11", "C13", "C14", "C15", "NAV"]
+    
     archivos = get_filelist_from_path(data_path, moment, productos)
     if not archivos:
         print(f"Error: No se encontró ningún archivo con este momento {moment}.")
@@ -232,6 +238,12 @@ def main(data_path, moment, output_path):
                 print(f"Asociando {prod} con: {archivo_path}")
                 file_paths[prod] = archivo_path
                 break # Pasamos al siguiente archivo una vez que encontramos su producto
+    
+    # Si se especificó un archivo NAV, lo agregamos al diccionario
+    if nav_file:
+        file_paths["NAV"] = str(nav_file)
+        print(f"Asociando NAV con: {nav_file}")
+    
     print("\n¡Éxito! Todos los productos requeridos fueron encontrados.")
 
     # Usamos xarray para abrir los archivos NetCDF
@@ -243,6 +255,7 @@ def main(data_path, moment, output_path):
     
     # Construir el CRS usando el string Proj4 de GOES-16
     from pyproj import CRS
+    from affine import Affine
     proj_string = (f"+proj=geos +h={goes_proj.perspective_point_height} "
                    f"+lon_0={goes_proj.longitude_of_projection_origin} "
                    f"+sweep={goes_proj.sweep_angle_axis} "
@@ -259,10 +272,18 @@ def main(data_path, moment, output_path):
     x_coords = ds_c07['x'].values * goes_proj.perspective_point_height
     y_coords = ds_c07['y'].values * goes_proj.perspective_point_height
     
-    # Configurar rioxarray con el CRS y las coordenadas espaciales
-    geo_template.rio.write_crs(crs_goes, inplace=True)
-    geo_template.rio.write_transform(inplace=True)
-
+    # --- Construir la geotransformación manualmente ---
+    # La geotransformación define cómo los píxeles se mapean a coordenadas espaciales.
+    # Formato: (x_res, rot_y, x_ul, rot_x, y_res, y_ul)
+    # 1. Calcular resolución (tamaño del píxel) en metros
+    x_res = x_coords[1] - x_coords[0]
+    y_res = y_coords[1] - y_coords[0] # Será negativo porque el origen es arriba-izquierda
+    # 2. Coordenada de la esquina superior izquierda (Upper Left)
+    x_ul = x_coords[0] - x_res / 2.0
+    y_ul = y_coords[0] - y_res / 2.0
+    # 3. Crear la matriz de transformación afín
+    geotransform = Affine(x_res, 0.0, x_ul, 0.0, y_res, y_ul)
+    
     # Leemos las demás variables
     c04 = xr.open_dataset(file_paths["C04"])['CMI'].data
     c07 = ds_c07['CMI'].data
@@ -368,14 +389,18 @@ def main(data_path, moment, output_path):
     # --- Guardado en GeoTIFF ---
     # Creamos un DataArray de xarray con el resultado, usando la plantilla geoespacial
     output_da = xr.DataArray(
-        data=ceniza.astype(np.uint8),
-        coords=geo_template.coords,
+        data=ceniza.astype(np.uint8), # Los datos de la clasificación
+        coords={
+            'y': y_coords, # Las coordenadas Y en metros que calculamos
+            'x': x_coords  # Las coordenadas X en metros que calculamos
+        },
         dims=geo_template.dims,
         name="ash_detection",
         attrs={"long_name": "Ash Detection Classification", "units": "category"}
     )
-    # Asignamos la información de proyección que rioxarray leyó
-    output_da.rio.write_crs(geo_template.rio.crs, inplace=True)
+    # Asignamos la información de proyección (CRS) y la geotransformación
+    output_da.rio.write_crs(crs_goes, inplace=True)
+    output_da.rio.write_transform(geotransform, inplace=True)
 
     print(f"\nGuardando resultado en: {output_path}")
     output_da.rio.to_raster(output_path, driver="GTiff", dtype="uint8", compress='LZW')
@@ -386,6 +411,7 @@ if __name__ == "__main__":
     parser.add_argument('--path', type=Path, default=l2_path, help=f"Ruta al directorio de datos L2. Por defecto: {l2_path}")
     parser.add_argument('--moment', type=str, default=None, help="Momento a procesar en formato 'YYYYjjjHHMM'. Por defecto, se calcula el más reciente.")
     parser.add_argument('--output', type=Path, default=None, help="Ruta del archivo GeoTIFF de salida. Por defecto, se genera un nombre basado en el momento.")
+    parser.add_argument('--nav', type=Path, default=None, help="Ruta a un archivo NAV específico. Si se especifica, no se buscará en el directorio de datos.")
     
     args = parser.parse_args()
 
@@ -404,4 +430,4 @@ if __name__ == "__main__":
     # Descomentar para pruebas con datos específicos
     # moment_a_procesar = "20191001731"
 
-    main(args.path, moment_a_procesar, output_file)
+    main(args.path, moment_a_procesar, output_file, nav_file=args.nav)
