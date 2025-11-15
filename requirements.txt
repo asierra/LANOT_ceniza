@@ -4,3 +4,5 @@ scipy
 xarray
 rioxarray
 affine
+netcdf4
+python-dateutil

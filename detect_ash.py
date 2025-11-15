@@ -13,6 +13,17 @@ from skyfield.api import Topos, load
 
 # Ruta al directorio de datos L2
 l2_path = Path("/data/ceniza/2019/spring")
+
+# Regiones predefinidas para recorte [lon_min, lat_max, lon_max, lat_min]
+CLIP_REGIONS = {
+    'centromex': [-107.2319400, 22.7180385, -93.8363933, 14.9386282],
+    'popocatepetl': [-100.2622042, 20.5800993, -96.8495200, 18.2893953]
+}
+
+# Generar versiones "geo" de las regiones automáticamente
+CLIP_REGIONS_WITH_GEO = CLIP_REGIONS.copy()
+for region_name, bbox in CLIP_REGIONS.items():
+    CLIP_REGIONS_WITH_GEO[f"{region_name}geo"] = bbox
  
 def get_moment(is_conus=True):
     """
@@ -204,9 +215,31 @@ def genera_media_dst(arreglo, kernel_size=5):
     return kernel_media, kernel_std
 
 
-def main(data_path, moment, output_path, nav_file=None):
+def main(data_path, moment, output_path, nav_file=None, clip_region=None):
     """Función principal para ejecutar el proceso de detección de cenizas."""
     print(f"Iniciando detección para el momento: {moment}")
+    
+    # Validar y obtener los límites de la región de recorte si se especificó
+    reproject_to_geo = False
+    if clip_region:
+        # Verificar si el nombre termina en "geo" para reproyectar
+        if clip_region.endswith("geo"):
+            reproject_to_geo = True
+            base_region = clip_region[:-3]  # Remover "geo" del final
+        else:
+            base_region = clip_region
+        
+        if base_region not in CLIP_REGIONS:
+            print(f"Error: Región '{base_region}' no reconocida. Regiones disponibles: {list(CLIP_REGIONS.keys())}")
+            return
+        
+        bbox = CLIP_REGIONS[base_region]
+        if reproject_to_geo:
+            print(f"Se aplicará recorte a región '{base_region}' y reproyección a lat/lon: {bbox}")
+        else:
+            print(f"Se aplicará recorte a región '{base_region}': {bbox}")
+    else:
+        bbox = None
 
     # Si se especifica un archivo NAV, no lo buscamos en el directorio
     if nav_file:
@@ -402,6 +435,65 @@ def main(data_path, moment, output_path, nav_file=None):
     output_da.rio.write_crs(crs_goes, inplace=True)
     output_da.rio.write_transform(geotransform, inplace=True)
 
+    # Aplicar recorte si se especificó una región
+    if bbox:
+        print(f"\nRecortando a región: {bbox}")
+        # bbox en formato [lon_min, lat_max, lon_max, lat_min]
+        # rio.clip_box espera (minx, miny, maxx, maxy) en el CRS del DataArray
+        # Como nuestro bbox está en coordenadas geográficas (lon/lat), 
+        # debemos transformar las coordenadas del bbox a la proyección GOES
+        from pyproj import Transformer
+        
+        # Crear transformador de lat/lon (EPSG:4326) a la proyección GOES
+        transformer = Transformer.from_crs("EPSG:4326", crs_goes, always_xy=True)
+        
+        # Transformar las esquinas del bbox
+        # bbox = [lon_min, lat_max, lon_max, lat_min]
+        lon_min, lat_max, lon_max, lat_min = bbox
+        
+        # Transformar esquina inferior izquierda (lon_min, lat_min)
+        x_min, y_min = transformer.transform(lon_min, lat_min)
+        # Transformar esquina superior derecha (lon_max, lat_max)
+        x_max, y_max = transformer.transform(lon_max, lat_max)
+        
+        print(f"Límites en coordenadas GOES: x=[{x_min:.2f}, {x_max:.2f}], y=[{y_min:.2f}, {y_max:.2f}]")
+        
+        # Aplicar el recorte usando las coordenadas transformadas
+        output_da = output_da.rio.clip_box(
+            minx=x_min,
+            miny=y_min,
+            maxx=x_max,
+            maxy=y_max
+        )
+        print(f"Forma del array recortado: {output_da.shape}")
+        
+        # Reproyectar a coordenadas geográficas si se especificó
+        if reproject_to_geo:
+            print("\nReproyectando a coordenadas geográficas (EPSG:4326)...")
+            
+            # Definir los límites en coordenadas geográficas
+            # bbox = [lon_min, lat_max, lon_max, lat_min]
+            # Calcular una resolución apropiada basada en el tamaño del recorte original
+            # Usamos aproximadamente el mismo número de píxeles
+            height, width = output_da.shape
+            
+            # Calcular resolución en grados
+            lon_range = lon_max - lon_min
+            lat_range = lat_max - lat_min
+            lon_res = lon_range / width
+            lat_res = lat_range / height
+            
+            print(f"Resolución objetivo: {lon_res:.6f}° (lon) x {lat_res:.6f}° (lat)")
+            
+            # Reproyectar usando rioxarray
+            output_da = output_da.rio.reproject(
+                dst_crs="EPSG:4326",
+                shape=(height, width),  # Mantener aproximadamente el mismo número de píxeles
+                resampling=0  # Nearest neighbor para datos categóricos
+            )
+            print(f"Forma después de reproyección: {output_da.shape}")
+            print(f"CRS final: EPSG:4326 (lat/lon)")
+
     print(f"\nGuardando resultado en: {output_path}")
     output_da.rio.to_raster(output_path, driver="GTiff", dtype="uint8", compress='LZW')
     print("¡Archivo GeoTIFF guardado con éxito!")
@@ -412,6 +504,8 @@ if __name__ == "__main__":
     parser.add_argument('--moment', type=str, default=None, help="Momento a procesar en formato 'YYYYjjjHHMM'. Por defecto, se calcula el más reciente.")
     parser.add_argument('--output', type=Path, default=None, help="Ruta del archivo GeoTIFF de salida. Por defecto, se genera un nombre basado en el momento.")
     parser.add_argument('--nav', type=Path, default=None, help="Ruta a un archivo NAV específico. Si se especifica, no se buscará en el directorio de datos.")
+    parser.add_argument('--clip', type=str, choices=list(CLIP_REGIONS_WITH_GEO.keys()), default=None, 
+                        help=f"Región para recortar el resultado final. Agrega 'geo' al final para reproyectar a lat/lon. Opciones: {', '.join(CLIP_REGIONS.keys())} (o con sufijo 'geo')")
     
     args = parser.parse_args()
 
@@ -430,4 +524,4 @@ if __name__ == "__main__":
     # Descomentar para pruebas con datos específicos
     # moment_a_procesar = "20191001731"
 
-    main(args.path, moment_a_procesar, output_file, nav_file=args.nav)
+    main(args.path, moment_a_procesar, output_file, nav_file=args.nav, clip_region=args.clip)
