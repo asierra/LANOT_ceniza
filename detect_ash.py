@@ -9,6 +9,9 @@ from scipy import ndimage
 from pathlib import Path
 from skyfield.api import utc
 from skyfield.api import Topos, load
+from concurrent.futures import ProcessPoolExecutor
+import multiprocessing
+import os
 
 
 # Ruta al directorio de datos L2
@@ -168,16 +171,32 @@ def get_sun_zenith_angle(lat_array, lon_array, image_time_dt):
     return sza_array
 
 
-def genera_media_dst(arreglo, kernel_size=5):
+def _process_block_std(args):
+    """
+    Función auxiliar para procesar un bloque del array en paralelo.
+    Calcula la desviación estándar local para un bloque específico.
+    """
+    block, kernel_size = args
+    return ndimage.generic_filter(
+        block,
+        np.nanstd,
+        size=kernel_size,
+        mode='constant',
+        cval=np.nan
+    )
+
+
+def genera_media_dst(arreglo, kernel_size=5, n_jobs=None):
     """
     Calcula la media y la desviación estándar local (kernel) de un arreglo, ignorando NaNs.
 
     Para la media, utiliza un método optimizado con uniform_filter para mayor rendimiento.
-    Para la desviación estándar, utiliza generic_filter con np.nanstd.
+    Para la desviación estándar, utiliza procesamiento paralelo dividiendo el array en bloques.
 
     Args:
         arreglo (np.ndarray): El arreglo de entrada, puede contener NaNs.
         kernel_size (int): El tamaño de la ventana cuadrada para el cálculo.
+        n_jobs (int, optional): Número de procesos paralelos. Si es None, usa todos los cores disponibles.
 
     Returns:
         tuple[np.ndarray, np.ndarray]: Una tupla conteniendo el arreglo de medias locales
@@ -199,18 +218,65 @@ def genera_media_dst(arreglo, kernel_size=5):
     # 5. Calcular la media, evitando división por cero
     kernel_media = np.divide(suma_local, conteo_local, where=conteo_local!=0, out=np.full(arreglo.shape, np.nan))
 
-    # --- Desviación Estándar (usando generic_filter) ---
-    kernel_std = ndimage.generic_filter(
-        arreglo, 
-        np.nanstd, 
-        size=kernel_size,
-        mode='constant',
-        cval=np.nan
-    )
-
+    # --- Desviación Estándar (usando procesamiento paralelo) ---
+    if n_jobs is None:
+        n_jobs = max(1, multiprocessing.cpu_count() - 2)  # Dejar 2 cores libres
+    
+    # Si el array es pequeño o n_jobs=1, usar procesamiento secuencial
+    if n_jobs == 1 or arreglo.size < 1000000:  # < 1M píxeles
+        kernel_std = ndimage.generic_filter(
+            arreglo, 
+            np.nanstd, 
+            size=kernel_size,
+            mode='constant',
+            cval=np.nan
+        )
+    else:
+        # Dividir el array en bloques horizontales con overlap
+        rows, cols = arreglo.shape
+        overlap = kernel_size // 2
+        
+        # Calcular número óptimo de bloques (uno por proceso)
+        n_blocks = min(n_jobs, rows // (kernel_size * 10))  # Bloques no muy pequeños
+        n_blocks = max(1, n_blocks)
+        
+        rows_per_block = rows // n_blocks
+        
+        blocks = []
+        indices = []
+        
+        for i in range(n_blocks):
+            start_row = i * rows_per_block
+            if i == n_blocks - 1:
+                end_row = rows
+            else:
+                end_row = (i + 1) * rows_per_block
+            
+            # Agregar overlap para evitar problemas en los bordes
+            block_start = max(0, start_row - overlap)
+            block_end = min(rows, end_row + overlap)
+            
+            block = arreglo[block_start:block_end, :]
+            blocks.append((block, kernel_size))
+            indices.append((start_row, end_row, block_start))
+        
+        # Procesar bloques en paralelo
+        with ProcessPoolExecutor(max_workers=n_jobs) as executor:
+            results = list(executor.map(_process_block_std, blocks))
+        
+        # Ensamblar los resultados
+        kernel_std = np.empty(arreglo.shape, dtype=arreglo.dtype)
+        for i, result in enumerate(results):
+            start_row, end_row, block_start = indices[i]
+            offset = start_row - block_start
+            result_slice = result[offset:offset + (end_row - start_row), :]
+            kernel_std[start_row:end_row, :] = result_slice
+    
     print(f"\n--- Resultados del Kernel ({kernel_size}x{kernel_size}) ---")
     print(f"Forma del array de Media: {kernel_media.shape}")
     print(f"Forma del array de Desv. Estándar: {kernel_std.shape}")
+    if n_jobs > 1:
+        print(f"Procesamiento paralelo con {n_jobs} procesos")
 
     return kernel_media, kernel_std
 
