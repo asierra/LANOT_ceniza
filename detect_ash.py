@@ -745,7 +745,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Detecta ceniza volcánica a partir de datos GOES L2.")
     parser.add_argument('--path', type=Path, default=l2_path, help=f"Ruta al directorio de datos L2. Por defecto: {l2_path}")
     parser.add_argument('--moment', type=str, default=None, help="Momento a procesar en formato 'YYYYjjjHHMM'. Por defecto, se calcula el más reciente.")
-    parser.add_argument('--output', type=Path, default=None, help="Ruta del archivo GeoTIFF de salida. Por defecto, se genera un nombre basado en el momento.")
+    parser.add_argument('--output', type=Path, default=None, 
+                        help="Ruta de salida para el GeoTIFF. Puede ser un archivo (ej: 'resultado.tif') o un directorio (ej: '/data/salida/'). "
+                             "Si es un directorio, se genera automáticamente el nombre 'ceniza_[momento].tif' (o con sufijo '_geo' si se reproyecta). "
+                             "Por defecto: './ceniza_[momento].tif'")
     parser.add_argument('--clip', type=str, choices=list(CLIP_REGIONS_WITH_GEO.keys()), default=None, 
                         help=f"Región para recortar el resultado final. Agrega 'geo' al final para reproyectar a lat/lon. Opciones: {', '.join(CLIP_REGIONS.keys())} (o con sufijo 'geo')")
     parser.add_argument('--png', action='store_true', help="Genera también una imagen PNG a color con la misma resolución que el GeoTIFF")
@@ -759,7 +762,15 @@ if __name__ == "__main__":
         moment_a_procesar = get_moment()
 
     if args.output:
-        output_file = args.output
+        output_file = Path(args.output)
+        # Si el usuario proporcionó un directorio, usar nombre por defecto en esa ruta
+        if output_file.is_dir():
+            # Determinar el nombre de archivo por defecto
+            if args.clip and args.clip.endswith('geo'):
+                filename = f"ceniza_{moment_a_procesar}_geo.tif"
+            else:
+                filename = f"ceniza_{moment_a_procesar}.tif"
+            output_file = output_file / filename
     else:
         # Genera un nombre de archivo de salida por defecto
         # Si se usa reproyección (sufijo 'geo'), agregar '_geo' al nombre

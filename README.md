@@ -92,23 +92,34 @@ Procesar un momento específico:
 ./detect_ash.py --path /data/ceniza/2019/spring --moment 20191001731
 ```
 
-Especificar archivo de salida personalizado:
+Especificar archivo o directorio de salida:
 
 ```bash
-./detect_ash.py --path /data/ceniza/2019/spring --moment 20191001731 --output resultado_ceniza.tif
+# Nombre de archivo específico
+./detect_ash.py --moment 20191001731 --output resultado_ceniza.tif
+
+# Directorio (genera nombre automático: ceniza_20191001731.tif)
+./detect_ash.py --moment 20191001731 --output /data/resultados/
+
+# Con reproyección, el sufijo _geo se agrega automáticamente
+./detect_ash.py --moment 20191001731 --clip popocatepetlgeo --output /data/resultados/
+# Genera: /data/resultados/ceniza_20191001731_geo.tif
 ```
 
 ### Parámetros de línea de comandos
 
 - `--path`: Ruta al directorio que contiene los archivos NetCDF L2 (por defecto: `/data/ceniza/2019/spring`)
 - `--moment`: Momento a procesar en formato `YYYYjjjHHMM` (año, día juliano, hora y minuto). Si no se especifica, se calcula automáticamente el más reciente
-- `--output`: Ruta del archivo GeoTIFF de salida. Si no se especifica, se genera como `ceniza_[momento].tif`
+- `--output`: Ruta de salida para el GeoTIFF. Puede ser:
+  - **Un archivo**: `resultado.tif` - Guarda con ese nombre
+  - **Un directorio**: `/data/salida/` - Genera automáticamente `ceniza_[momento].tif` (o con sufijo `_geo` si se reproyecta)
+  - **Por defecto**: `./ceniza_[momento].tif`
 - `--clip`: Región para recortar el resultado. Opciones disponibles:
   - `centromex`: Centro de México (proyección GOES nativa)
   - `centromexgeo`: Centro de México (reproyectado a lat/lon EPSG:4326)
   - `popocatepetl`: Región del Popocatépetl (proyección GOES nativa)
   - `popocatepetlgeo`: Región del Popocatépetl (reproyectado a lat/lon EPSG:4326)
-- `--png`: Genera también una imagen PNG a color con la misma resolución que el GeoTIFF. Los colores se definen en `ash.cpt`
+- `--png`: Genera también una imagen PNG a color con mapa base, fecha/hora y logo LANOT
 
 ### Ejemplos de uso
 
@@ -130,8 +141,16 @@ Especificar archivo de salida personalizado:
 
 **Recorte con reproyección a coordenadas geográficas:**
 ```bash
-./detect_ash.py --moment 20190871402 --clip centromexgeo
-./detect_ash.py --moment 20190871402 --clip popocatepetlgeo --output popo_geo.tif --png
+./detect_ash.py --moment 20190871402 --clip centromexgeo --png
+./detect_ash.py --moment 20190871402 --clip popocatepetlgeo --output /data/salida/ --png
+```
+
+**Guardar múltiples archivos en un directorio:**
+```bash
+# El directorio puede especificarse solo una vez
+./detect_ash.py --moment 20190871402 --output /data/procesados/ --png
+./detect_ash.py --moment 20190871506 --output /data/procesados/ --png
+# Genera: ceniza_20190871402.tif, ceniza_20190871402.png, ceniza_20190871506.tif, etc.
 ```
 
 ### Regiones de recorte predefinidas
@@ -178,14 +197,34 @@ Cuando se usa el parámetro `--png`, se genera también una imagen PNG a color c
   - Negro: Sin detección
 
 - **Mapa base** dibujado con MapDrawer (si está disponible `/usr/local/share/lanot`):
-  - Líneas costeras (amarillo)
+  - Líneas costeras (blanco)
   - Fronteras nacionales (blanco)
-  - Estados de México (cian)
-  - Logo LANOT en la esquina inferior derecha
+  - Estados de México (blanco)
+  - **Logo LANOT** en esquina superior derecha
+  - **Fecha/hora** en esquina inferior izquierda (formato: "2019/10/10 17:31Z")
+    - Usa fuente monoespaciada DejaVuSansMono para mantener posición fija en animaciones
 
 La imagen PNG calcula automáticamente los límites geográficos del raster (ya sea en proyección GOES o reproyectado a lat/lon) y dibuja el mapa base en las coordenadas correctas.
 
 > **Nota**: Para que MapDrawer funcione correctamente, se requieren los archivos shapefile en `/usr/local/share/lanot/shapefiles/` y el logo en `/usr/local/share/lanot/logos/`. Si estos recursos no están disponibles, el PNG se generará solo con la clasificación de ceniza.
+
+**Nombres de archivo con sufijo `_geo`:**
+
+Cuando se usa reproyección a coordenadas geográficas (opciones que terminan en "geo"), los archivos de salida incluyen automáticamente el sufijo `_geo`:
+
+```bash
+# Sin reproyección
+./detect_ash.py --moment 20191001731
+# Genera: ceniza_20191001731.tif
+
+# Con reproyección
+./detect_ash.py --moment 20191001731 --clip popocatepetlgeo
+# Genera: ceniza_20191001731_geo.tif
+
+# Con PNG
+./detect_ash.py --moment 20191001731 --clip popocatepetlgeo --png
+# Genera: ceniza_20191001731_geo.tif y ceniza_20191001731_geo.png
+```
 
 ## Estructura del proyecto
 
@@ -307,6 +346,9 @@ Este enfoque minimiza el uso de memoria y acelera significativamente el procesam
 - El procesamiento usa `np.select()` para clasificaciones eficientes y vectorizadas
 - Los filtros espaciales manejan correctamente valores NaN usando métodos optimizados de scipy.ndimage
 - La salida GeoTIFF preserva la proyección nativa GOES usando cadenas Proj4 simplificadas
+- **Sufijo `_geo`** se agrega automáticamente a los nombres de archivo cuando se reproyecta a EPSG:4326
+- **Salida a directorios**: Si `--output` es un directorio, genera nombres automáticos en esa ubicación
+- **Fuente monoespaciada** en PNG (DejaVuSansMono) mantiene la fecha fija para animaciones suaves
 
 ### Optimización de rendimiento
 
