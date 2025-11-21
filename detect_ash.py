@@ -17,7 +17,7 @@ from mapdrawer import MapDrawer
 
 
 # Ruta al directorio de datos L2
-l2_path = Path("/data/ceniza/2019/spring")
+l2_path = Path("/data/ceniza/l2/spring")
 
 # Regiones predefinidas para recorte [lon_min, lat_max, lon_max, lat_min]
 CLIP_REGIONS = {
