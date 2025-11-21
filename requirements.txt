@@ -7,3 +7,6 @@ affine
 netcdf4
 pyproj
 python-dateutil
+Pillow
+aggdraw
+pyshp

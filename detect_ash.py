@@ -12,6 +12,8 @@ from skyfield.api import Topos, load
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
 import os
+from PIL import Image
+from mapdrawer import MapDrawer
 
 
 # Ruta al directorio de datos L2
@@ -281,7 +283,114 @@ def genera_media_dst(arreglo, kernel_size=5, n_jobs=None):
     return kernel_media, kernel_std
 
 
-def main(data_path, moment, output_path, clip_region=None):
+def create_color_png(data_array, output_path, color_table_path=None, bounds=None, timestamp=None, lanot_dir='/usr/local/share/lanot'):
+    """
+    Crea una imagen PNG a color a partir del array de clasificación de ceniza,
+    con mapa base dibujado usando MapDrawer.
+    
+    Args:
+        data_array (np.ndarray): Array 2D con valores de clasificación (0-5)
+        output_path (Path or str): Ruta del archivo PNG de salida
+        color_table_path (Path or str, optional): Ruta al archivo .cpt con la paleta de colores.
+                                                   Por defecto usa ash.cpt en el mismo directorio.
+        bounds (tuple, optional): Límites geográficos (lon_min, lat_max, lon_max, lat_min) en WGS84.
+                                  Si se proporciona, dibuja líneas costeras y logo.
+        timestamp (datetime, optional): Fecha/hora de la imagen para mostrar en el PNG.
+        lanot_dir (str): Directorio base de recursos LANOT (shapefiles, logos)
+    
+    Returns:
+        None
+    """
+    # Paleta de colores por defecto basada en ash.cpt
+    default_colors = {
+        0: (0, 0, 0),       # clear - negro
+        1: (255, 0, 0),     # ash - rojo
+        2: (255, 165, 0),   # probable - naranja
+        3: (255, 255, 0),   # baja probable - amarillo
+        4: (0, 255, 0),     # cloud - verde
+        5: (0, 0, 255)      # noise - azul
+    }
+    
+    # Si se proporciona un archivo .cpt, intentar leerlo
+    if color_table_path:
+        try:
+            colors = {}
+            with open(color_table_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and not line.startswith('B') and not line.startswith('F') and not line.startswith('N'):
+                        parts = line.split(';')[0].split()
+                        if len(parts) >= 4:
+                            value = int(parts[0])
+                            r, g, b = int(parts[1]), int(parts[2]), int(parts[3])
+                            colors[value] = (r, g, b)
+            if colors:
+                default_colors.update(colors)
+                print(f"Paleta de colores cargada desde: {color_table_path}")
+        except Exception as e:
+            print(f"Advertencia: No se pudo leer {color_table_path}, usando paleta por defecto. Error: {e}")
+    
+    # Crear arrays RGB
+    height, width = data_array.shape
+    rgb_array = np.zeros((height, width, 3), dtype=np.uint8)
+    
+    # Aplicar colores según el valor de clasificación
+    for value, color in default_colors.items():
+        mask = (data_array == value)
+        rgb_array[mask] = color
+    
+    # Crear imagen PIL
+    img = Image.fromarray(rgb_array, mode='RGB')
+    
+    # Si se proporcionan límites geográficos, usar MapDrawer para dibujar mapa
+    if bounds is not None:
+        try:
+            lon_min, lat_max, lon_max, lat_min = bounds
+            
+            # Inicializar MapDrawer
+            mapper = MapDrawer(lanot_dir=lanot_dir, target_crs=None)
+            mapper.set_image(img)
+            mapper.set_bounds(lon_min, lat_max, lon_max, lat_min)
+            
+            # Dibujar líneas costeras y fronteras
+            print("Dibujando elementos del mapa...")
+            
+            # Intentar dibujar shapefiles comunes
+            shapefiles = [
+                ('shapefiles/ne_10m_coastline.shp', 'white', 0.5),
+                ('shapefiles/ne_10m_admin_0_countries.shp', 'white', 0.5),
+                ('shapefiles/dest_2015gwLines.shp', 'white', 0.5),  # Estados de México
+            ]
+            
+            for shp_path, color, width in shapefiles:
+                try:
+                    mapper.draw_shapefile(shp_path, color=color, width=width)
+                except Exception as e:
+                    print(f"  No se pudo dibujar {shp_path}: {e}")
+            
+            # Dibujar logo LANOT
+            try:
+                mapper.draw_logo(logosize=128, position=1)  # Upper-right
+            except Exception as e:
+                print(f"  No se pudo dibujar logo: {e}")
+            
+            # Dibujar fecha/hora en esquina inferior izquierda (posición 2)
+            if timestamp is not None:
+                try:
+                    mapper.draw_fecha(timestamp, position=2, fontsize=16, color='yellow')
+                except Exception as e:
+                    print(f"  No se pudo dibujar fecha: {e}")
+                
+        except Exception as e:
+            print(f"Advertencia: No se pudo usar MapDrawer para decorar el mapa: {e}")
+            print("  Se guardará solo la imagen de clasificación.")
+    
+    # Guardar imagen
+    img.save(output_path)
+    print(f"Imagen PNG guardada en: {output_path}")
+
+
+def main(data_path, moment, output_path, clip_region=None, create_png=False):
     """Función principal para ejecutar el proceso de detección de cenizas."""
     print(f"Iniciando detección para el momento: {moment}")
     
@@ -505,10 +614,11 @@ def main(data_path, moment, output_path, clip_region=None):
 
     # Refinamiento de umbrales (usando np.select)
     cond_um1 = [
-        (ceniza_tiempo == 2) & (delta2 >= -1.5),
-        (ceniza_tiempo == 2) & (delta2 < -1.5)
+        ceniza_tiempo == 1,
+        (ceniza_tiempo == 2) & (delta2 >= -1),
+        (ceniza_tiempo == 2) & (delta2 >= -1.5)
     ]
-    val_um1 = [3, 0]
+    val_um1 = [1, 2, 3]
     ceniza_um1 = np.select(cond_um1, val_um1, default=ceniza_tiempo)
 
     cond_um2 = [
@@ -520,11 +630,11 @@ def main(data_path, moment, output_path, clip_region=None):
     # Clasificación final basada en fase de la nube
     cond_final = [
         (ceniza_um2 == 2) & (phase == 1), # Nube de agua
-        (ceniza_um2 == 2) & (phase == 4), # Polvo
+        (ceniza_um2 == 2) & (phase == 4), # Hielo
         (ceniza_um2 == 3) & (phase == 1), # Nube de agua
-        (ceniza_um2 == 3) & (phase >= 2)  # Hielo, etc.
+        (ceniza_um2 == 3) & (phase >= 2)  # Superfría
     ]
-    val_final = [4, 0, 5, 0]
+    val_final = [3, 0, 0, 0]
     ceniza = np.select(cond_final, val_final, default=ceniza_um2)
 
     print("\n--- Clasificación Final de Ceniza ---")
@@ -579,6 +689,57 @@ def main(data_path, moment, output_path, clip_region=None):
     print(f"\nGuardando resultado en: {output_path}")
     output_da.rio.to_raster(output_path, driver="GTiff", dtype="uint8", compress='LZW')
     print("¡Archivo GeoTIFF guardado con éxito!")
+    
+    # Crear imagen PNG a color si se solicita
+    if create_png:
+        # Determinar la ruta del archivo PNG
+        png_path = Path(str(output_path).replace('.tif', '.png'))
+        
+        # Buscar el archivo ash.cpt en el directorio del script
+        script_dir = Path(__file__).parent
+        cpt_path = script_dir / 'ash.cpt'
+        
+        print("\n--- Generando imagen PNG a color ---")
+        
+        # Calcular los límites geográficos del DataArray
+        # Si está reproyectado a EPSG:4326, usar las coordenadas directamente
+        # Si está en proyección GOES, necesitamos convertir las esquinas
+        png_bounds = None
+        
+        if output_da.rio.crs is not None:
+            try:
+                # Obtener los límites del raster
+                bounds_array = output_da.rio.bounds()
+                # bounds_array es (left, bottom, right, top)
+                # Necesitamos convertirlo a (lon_min, lat_max, lon_max, lat_min)
+                
+                if output_da.rio.crs.to_string() == "EPSG:4326":
+                    # Ya está en coordenadas geográficas
+                    png_bounds = (bounds_array[0], bounds_array[3], bounds_array[2], bounds_array[1])
+                else:
+                    # Reproyectar esquinas a EPSG:4326 para el mapa
+                    from pyproj import Transformer
+                    transformer = Transformer.from_crs(output_da.rio.crs, "EPSG:4326", always_xy=True)
+                    
+                    # Transformar esquinas
+                    lon_min, lat_min = transformer.transform(bounds_array[0], bounds_array[1])
+                    lon_max, lat_max = transformer.transform(bounds_array[2], bounds_array[3])
+                    
+                    png_bounds = (lon_min, lat_max, lon_max, lat_min)
+                
+                print(f"Límites geográficos del PNG: lon [{png_bounds[0]:.2f}, {png_bounds[2]:.2f}], lat [{png_bounds[3]:.2f}, {png_bounds[1]:.2f}]")
+                
+            except Exception as e:
+                print(f"Advertencia: No se pudieron calcular límites geográficos: {e}")
+                print("  El PNG se generará sin mapa base.")
+        
+        create_color_png(
+            output_da.data, 
+            png_path, 
+            cpt_path if cpt_path.exists() else None,
+            bounds=png_bounds,
+            timestamp=image_time_dt
+        )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Detecta ceniza volcánica a partir de datos GOES L2.")
@@ -587,6 +748,7 @@ if __name__ == "__main__":
     parser.add_argument('--output', type=Path, default=None, help="Ruta del archivo GeoTIFF de salida. Por defecto, se genera un nombre basado en el momento.")
     parser.add_argument('--clip', type=str, choices=list(CLIP_REGIONS_WITH_GEO.keys()), default=None, 
                         help=f"Región para recortar el resultado final. Agrega 'geo' al final para reproyectar a lat/lon. Opciones: {', '.join(CLIP_REGIONS.keys())} (o con sufijo 'geo')")
+    parser.add_argument('--png', action='store_true', help="Genera también una imagen PNG a color con la misma resolución que el GeoTIFF")
     
     args = parser.parse_args()
 
@@ -600,9 +762,13 @@ if __name__ == "__main__":
         output_file = args.output
     else:
         # Genera un nombre de archivo de salida por defecto
-        output_file = Path(f"./ceniza_{moment_a_procesar}.tif")
+        # Si se usa reproyección (sufijo 'geo'), agregar '_geo' al nombre
+        if args.clip and args.clip.endswith('geo'):
+            output_file = Path(f"./ceniza_{moment_a_procesar}_geo.tif")
+        else:
+            output_file = Path(f"./ceniza_{moment_a_procesar}.tif")
 
     # Descomentar para pruebas con datos específicos
     # moment_a_procesar = "20191001731"
 
-    main(args.path, moment_a_procesar, output_file, clip_region=args.clip)
+    main(args.path, moment_a_procesar, output_file, clip_region=args.clip, create_png=args.png)

@@ -1,0 +1,12 @@
+# ash.cpt
+# Clasificación de ceniza volcánica
+# COLOR_MODEL = RGB
+0   0   0   0 ; clear
+1 255   0   0 ; ash
+2 255 165   0 ; probable
+3 255 255   0 ; less probable
+4   0 255   0 ; cloud
+5   0   0 255 ; noise
+B   0   0   0
+F 255 255 255
+N 255   0   0

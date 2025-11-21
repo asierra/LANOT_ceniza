@@ -72,6 +72,9 @@ El sistema utiliza múltiples canales infrarrojos y productos derivados para:
 - **pyproj**: Transformaciones de sistemas de coordenadas y proyecciones (GOES ↔ lat/lon)
 - **affine**: Geotransformaciones afines para georreferenciación
 - **python-dateutil**: Parsing de fechas en formato ISO 8601
+- **Pillow (PIL)**: Generación de imágenes PNG a color
+- **aggdraw**: Dibujo de vectores de alta calidad sobre imágenes PNG
+- **pyshp**: Lectura de archivos shapefile para mapas base
 
 ## Uso
 
@@ -105,6 +108,7 @@ Especificar archivo de salida personalizado:
   - `centromexgeo`: Centro de México (reproyectado a lat/lon EPSG:4326)
   - `popocatepetl`: Región del Popocatépetl (proyección GOES nativa)
   - `popocatepetlgeo`: Región del Popocatépetl (reproyectado a lat/lon EPSG:4326)
+- `--png`: Genera también una imagen PNG a color con la misma resolución que el GeoTIFF. Los colores se definen en `ash.cpt`
 
 ### Ejemplos de uso
 
@@ -113,16 +117,21 @@ Especificar archivo de salida personalizado:
 ./detect_ash.py --path /data/ceniza/2019/spring --moment 20190871402
 ```
 
+**Generar también imagen PNG a color:**
+```bash
+./detect_ash.py --moment 20190871402 --png
+```
+
 **Recorte a región específica (proyección GOES):**
 ```bash
 ./detect_ash.py --moment 20190871402 --clip centromex
-./detect_ash.py --moment 20190871402 --clip popocatepetl
+./detect_ash.py --moment 20190871402 --clip popocatepetl --png
 ```
 
 **Recorte con reproyección a coordenadas geográficas:**
 ```bash
 ./detect_ash.py --moment 20190871402 --clip centromexgeo
-./detect_ash.py --moment 20190871402 --clip popocatepetlgeo --output popo_geo.tif
+./detect_ash.py --moment 20190871402 --clip popocatepetlgeo --output popo_geo.tif --png
 ```
 
 ### Regiones de recorte predefinidas
@@ -145,27 +154,70 @@ El procesamiento paralelo se aplica automáticamente a la operación más costos
 
 ### Salida
 
-El script genera un archivo GeoTIFF con la clasificación de ceniza volcánica en proyección geoestacionaria GOES-16. Los valores en el raster representan:
+El script genera un archivo GeoTIFF con la clasificación de ceniza volcánica en proyección geoestacionaria GOES-16 (o EPSG:4326 si se reproyecta). Los valores en el raster representan:
 
-- **0**: Sin detección
-- **1**: Ceniza volcánica - alta confianza (BTD clásica)
-- **2**: Ceniza volcánica - media confianza
-- **3**: Ceniza volcánica refinada (umbral delta2)
-- **4**: Nube de agua reclasificada
-- **5**: Ceniza sobre superficie fría
+- **0**: Sin detección (negro en PNG)
+- **1**: Ceniza volcánica - alta confianza (rojo en PNG)
+- **2**: Ceniza volcánica - media confianza (naranja en PNG)
+- **3**: Ceniza volcánica refinada - umbral delta2 (amarillo en PNG)
+- **4**: Nube de agua reclasificada (verde en PNG)
+- **5**: Ceniza sobre superficie fría (azul en PNG)
 
 El archivo incluye georreferenciación completa y puede ser visualizado en cualquier software GIS (QGIS, ArcGIS, etc.).
+
+**Salida PNG (opcional con `--png`):**
+
+Cuando se usa el parámetro `--png`, se genera también una imagen PNG a color con las mismas dimensiones que el GeoTIFF. La imagen incluye:
+
+- **Clasificación de ceniza** con colores definidos en `ash.cpt`:
+  - Rojo: Ceniza volcánica de alta confianza
+  - Naranja: Ceniza probable
+  - Amarillo: Ceniza menos probable
+  - Verde: Nubes de agua
+  - Azul: Ruido/superficie fría
+  - Negro: Sin detección
+
+- **Mapa base** dibujado con MapDrawer (si está disponible `/usr/local/share/lanot`):
+  - Líneas costeras (amarillo)
+  - Fronteras nacionales (blanco)
+  - Estados de México (cian)
+  - Logo LANOT en la esquina inferior derecha
+
+La imagen PNG calcula automáticamente los límites geográficos del raster (ya sea en proyección GOES o reproyectado a lat/lon) y dibuja el mapa base en las coordenadas correctas.
+
+> **Nota**: Para que MapDrawer funcione correctamente, se requieren los archivos shapefile en `/usr/local/share/lanot/shapefiles/` y el logo en `/usr/local/share/lanot/logos/`. Si estos recursos no están disponibles, el PNG se generará solo con la clasificación de ceniza.
 
 ## Estructura del proyecto
 
 ```
 LANOT_ceniza/
-├── detect_ash.py       # Script principal
+├── detect_ash.py       # Script principal de detección
+├── mapdrawer.py        # Módulo para dibujar mapas base en PNG
 ├── requirements.txt    # Dependencias del proyecto
+├── ash.cpt             # Paleta de colores para clasificación
 ├── de421.bsp          # Efemérides planetarias (descargado automáticamente)
 ├── README.md          # Este archivo
 └── LICENSE            # Licencia del proyecto
 ```
+
+### Recursos adicionales para MapDrawer (opcional)
+
+Para generar imágenes PNG con mapa base, se requiere la siguiente estructura en `/usr/local/share/lanot`:
+
+```
+/usr/local/share/lanot/
+├── shapefiles/
+│   ├── ne_10m_coastline.shp         # Líneas costeras
+│   ├── ne_10m_admin_0_countries.shp # Fronteras nacionales
+│   └── dest_2015gwLines.shp         # Estados de México
+└── logos/
+    └── lanot_negro_sn-128.png       # Logo LANOT
+```
+
+Los shapefiles pueden descargarse de:
+- [Natural Earth - 10m Coastline](https://www.naturalearthdata.com/downloads/10m-physical-vectors/)
+- [Natural Earth - 10m Admin 0 - Countries](https://www.naturalearthdata.com/downloads/10m-cultural-vectors/)
+- Estados de México: `dest_2015gwLines.shp` (shapefile de estados de México de INEGI)
 
 ## Metodología
 
