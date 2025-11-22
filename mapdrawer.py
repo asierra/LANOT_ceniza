@@ -27,6 +27,14 @@ class MapDrawer:
         self.lanot_dir = lanot_dir
         self.image = None
         self._shp_cache = {} # Caché para no re-leer shapefiles del disco
+        # Mapeo interno de capas simbólicas -> rutas relativas de shapefiles
+        # Se puede extender con add_layer(). Las claves se manejan en mayúsculas.
+        self._layers = {
+            'COASTLINE': 'shapefiles/ne_10m_coastline.shp',
+            'COUNTRIES': 'shapefiles/ne_10m_admin_0_countries.shp',
+            #'MEXSTATES': 'shapefiles/dest_2015gwLines.shp'
+            'MEXSTATES': 'shapefiles/mexico_estados_2023_wgs84_lines.shp'
+        }
 
         # Configuración de proyección
         self.use_proj = False
@@ -184,6 +192,37 @@ class MapDrawer:
 
         draw.flush()
 
+    # --- Nueva API basada en nombres de capa ---
+    def add_layer(self, key, rel_path):
+        """Agrega o actualiza una capa simbólica.
+
+        Args:
+            key (str): Nombre simbólico (ej: 'RIVERS'). Se normaliza a mayúsculas.
+            rel_path (str): Ruta relativa al directorio lanot_dir.
+        """
+        self._layers[key.upper()] = rel_path
+
+    def list_layers(self):
+        """Devuelve lista de claves de capas disponibles."""
+        return sorted(self._layers.keys())
+
+    def draw_layer(self, key, color='yellow', width=0.5):
+        """Dibuja una capa referenciada por nombre simbólico.
+
+        Args:
+            key (str): Clave de la capa (ej: 'COASTLINE'). No sensible a mayúsculas.
+            color (str): Color de la línea.
+            width (float): Grosor de línea.
+        """
+        if self.image is None:
+            return
+        layer_key = key.upper()
+        if layer_key not in self._layers:
+            print(f"Advertencia: capa '{key}' no registrada. Capas disponibles: {self.list_layers()}")
+            return
+        rel_path = self._layers[layer_key]
+        self.draw_shapefile(rel_path, color=color, width=width)
+
     def draw_logo(self, logosize=128, position=3):
         """
         position: bitmask (0=Left, 1=Right) | (0=Top, 2=Bottom) 
@@ -270,6 +309,82 @@ class MapDrawer:
             
         except Exception as e:
             print(f"Error dibujando fecha: {e}")
+    def draw_legend(self, items, position=2, fontsize=15, box_size=None, 
+                    padding=10, gap=6, margin=10, vertical_offset=0,
+                    bg_color='white', text_color='black', border_color=None, border_width=1):
+        """Dibuja una leyenda con recuadros de color y etiquetas.
+
+        Args:
+            items (list[tuple[str, tuple|str]]): Lista de (etiqueta, color).
+            position (int): 0=UL, 1=UR, 2=LL, 3=LR.
+            fontsize (int): Tamaño de fuente.
+            box_size (int, opcional): Tamaño del cuadro de color. Por defecto = fontsize.
+            padding (int): Relleno interno del fondo.
+            gap (int): Espacio entre cuadro de color y texto.
+            margin (int): Margen desde el borde de la imagen.
+            vertical_offset (int): Desplazamiento vertical en píxeles desde el borde
+                (positivo aleja del borde: hacia arriba si Bottom, hacia abajo si Top).
+            bg_color (str|tuple): Color de fondo de la leyenda.
+            text_color (str|tuple): Color del texto.
+            border_color (str|tuple, opcional): Color del borde. None para sin borde.
+            border_width (int): Grosor del borde si border_color no es None.
+        """
+        if self.image is None or not items:
+            return
+
+        box_size = box_size or fontsize
+        draw = aggdraw.Draw(self.image)
+        
+        try:
+            font = aggdraw.Font(text_color, '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf', fontsize)
+        except:
+            font = aggdraw.Font(text_color, size=fontsize)
+
+        # Calcular dimensiones
+        text_width = lambda s: int(len(str(s)) * fontsize * 0.6)
+        line_heights = [max(fontsize + 4, box_size) for _, _ in items]
+        line_widths = [padding + box_size + gap + text_width(label) + padding for label, _ in items]
+        
+        legend_width = max(line_widths)
+        legend_height = padding + sum(line_heights) + padding
+
+        # Calcular posición
+        pos_x = position & 1
+        pos_y = position >> 1
+
+        x0 = self.image.width - legend_width - margin if pos_x else margin
+        y0 = (self.image.height - legend_height - margin - vertical_offset) if pos_y else (margin + vertical_offset)
+        x1 = x0 + legend_width
+        y1 = y0 + legend_height
+
+        # Dibujar fondo
+        brush_bg = aggdraw.Brush(bg_color)
+        if border_color:
+            pen_border = aggdraw.Pen(border_color, border_width)
+            draw.rectangle((x0, y0, x1, y1), pen_border, brush_bg)
+        else:
+            draw.rectangle((x0, y0, x1, y1), None, brush_bg)
+
+        # Dibujar filas (cuadro de color + etiqueta)
+        cy = y0 + padding
+        for label, color in items:
+            lh = max(fontsize + 4, box_size)
+            
+            # Cuadro de color
+            bx0 = x0 + padding
+            by0 = cy + (lh - box_size) // 2
+            bx1 = bx0 + box_size
+            by1 = by0 + box_size
+            draw.rectangle((bx0, by0, bx1, by1), aggdraw.Pen(color, 1), aggdraw.Brush(color))
+
+            # Texto de etiqueta
+            tx = bx1 + gap
+            ty = cy + (lh - fontsize) // 2
+            draw.text((tx, ty), str(label), font)
+
+            cy += lh
+
+        draw.flush()
 
 # --- Bloque Principal para pruebas ---
 if __name__ == "__main__":

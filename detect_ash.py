@@ -352,21 +352,20 @@ def create_color_png(data_array, output_path, color_table_path=None, bounds=None
             mapper.set_image(img)
             mapper.set_bounds(lon_min, lat_max, lon_max, lat_min)
             
-            # Dibujar líneas costeras y fronteras
-            print("Dibujando elementos del mapa...")
-            
-            # Intentar dibujar shapefiles comunes
-            shapefiles = [
-                ('shapefiles/ne_10m_coastline.shp', 'white', 0.5),
-                ('shapefiles/ne_10m_admin_0_countries.shp', 'white', 0.5),
-                ('shapefiles/dest_2015gwLines.shp', 'white', 0.5),  # Estados de México
-            ]
-            
-            for shp_path, color, width in shapefiles:
+            # Selección de capas según tamaño del dominio: si es local (span pequeño) solo MEXSTATES
+            lon_span = abs(lon_max - lon_min)
+            lat_span = abs(lat_max - lat_min)
+            if lon_span < 20 and lat_span < 20:
+                layer_selection = ("MEXSTATES",)
+                print("Dominio local detectado; dibujando solo capa MEXSTATES.")
+            else:
+                layer_selection = ("COASTLINE", "COUNTRIES", "MEXSTATES")
+                print("Dominio amplio; dibujando capas COASTLINE, COUNTRIES y MEXSTATES.")
+            for layer_key in layer_selection:
                 try:
-                    mapper.draw_shapefile(shp_path, color=color, width=width)
+                    mapper.draw_layer(layer_key, color='white', width=0.5)
                 except Exception as e:
-                    print(f"  No se pudo dibujar {shp_path}: {e}")
+                    print(f"  No se pudo dibujar capa {layer_key}: {e}")
             
             # Dibujar logo LANOT
             try:
@@ -380,6 +379,22 @@ def create_color_png(data_array, output_path, color_table_path=None, bounds=None
                     mapper.draw_fecha(timestamp, position=2, fontsize=16, color='yellow')
                 except Exception as e:
                     print(f"  No se pudo dibujar fecha: {e}")
+            
+            # Dibujar leyenda automática con la paleta actual (solo clases 1–3)
+            try:
+                etiquetas = {
+                    1: 'Ash',
+                    2: 'Probable Ash',
+                    3: 'Possible Ash',
+                }
+                # Solo mostramos clases 1–3 en la leyenda
+                orden = [1, 2, 3]
+                items = [(etiquetas[v], default_colors[v]) for v in orden if v in default_colors]
+                # Colocar la leyenda encima de la fecha (fecha: position=2),
+                # aplicando un desplazamiento vertical sencillo.
+                mapper.draw_legend(items=items, position=2, fontsize=14, border_color='black', vertical_offset=40)
+            except Exception as e:
+                print(f"  No se pudo dibujar la leyenda: {e}")
                 
         except Exception as e:
             print(f"Advertencia: No se pudo usar MapDrawer para decorar el mapa: {e}")
