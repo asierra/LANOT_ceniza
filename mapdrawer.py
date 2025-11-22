@@ -276,11 +276,20 @@ class MapDrawer:
             draw = aggdraw.Draw(self.image)
             
             # Crear fuente (aggdraw usa fuentes truetype)
-            try:
-                # Intentar usar una fuente del sistema
-                font = aggdraw.Font(color, '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf', fontsize)
-            except:
-                # Si falla, usar fuente por defecto (puede ser más pequeña)
+            # Intentar múltiples rutas para compatibilidad Debian/Rocky
+            font_paths = [
+                '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf',  # Debian/Ubuntu
+                '/usr/share/fonts/dejavu-sans-mono-fonts/DejaVuSansMono.ttf',  # Rocky/RHEL
+            ]
+            font = None
+            for font_path in font_paths:
+                try:
+                    font = aggdraw.Font(color, font_path, fontsize)
+                    break
+                except:
+                    continue
+            if font is None:
+                # Si todas fallan, usar fuente por defecto
                 font = aggdraw.Font(color, size=fontsize)
             
             # Calcular posición del texto
@@ -335,9 +344,20 @@ class MapDrawer:
         box_size = box_size or fontsize
         draw = aggdraw.Draw(self.image)
         
-        try:
-            font = aggdraw.Font(text_color, '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf', fontsize)
-        except:
+        # Intentar múltiples rutas para compatibilidad Debian/Rocky
+        font_paths = [
+            '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf',  # Debian/Ubuntu
+            '/usr/share/fonts/dejavu-sans-mono-fonts/DejaVuSansMono.ttf',  # Rocky/RHEL
+        ]
+        font = None
+        for font_path in font_paths:
+            try:
+                font = aggdraw.Font(text_color, font_path, fontsize)
+                break
+            except:
+                continue
+        if font is None:
+            # Si todas fallan, usar fuente por defecto
             font = aggdraw.Font(text_color, size=fontsize)
 
         # Calcular dimensiones
