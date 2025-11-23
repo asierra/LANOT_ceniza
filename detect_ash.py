@@ -283,7 +283,7 @@ def genera_media_dst(arreglo, kernel_size=5, n_jobs=None):
     return kernel_media, kernel_std
 
 
-def create_color_png(data_array, output_path, color_table_path=None, bounds=None, timestamp=None, lanot_dir='/usr/local/share/lanot'):
+def create_color_png(data_array, output_path, color_table_path=None, bounds=None, timestamp=None, lanot_dir='/usr/local/share/lanot', crs=None):
     """
     Crea una imagen PNG a color a partir del array de clasificación de ceniza,
     con mapa base dibujado usando MapDrawer.
@@ -297,6 +297,9 @@ def create_color_png(data_array, output_path, color_table_path=None, bounds=None
                                   Si se proporciona, dibuja líneas costeras y logo.
         timestamp (datetime, optional): Fecha/hora de la imagen para mostrar en el PNG.
         lanot_dir (str): Directorio base de recursos LANOT (shapefiles, logos)
+        crs (str or CRS, optional): Sistema de coordenadas de la imagen. Si es None o 'EPSG:4326',
+                                    usa proyección lineal. Si es otra proyección (ej: GOES), 
+                                    MapDrawer reproyectará las capas correctamente.
     
     Returns:
         None
@@ -347,8 +350,17 @@ def create_color_png(data_array, output_path, color_table_path=None, bounds=None
         try:
             lon_min, lat_max, lon_max, lat_min = bounds
             
+            # Determinar si necesitamos usar proyección o modo lineal
+            # Si la imagen está en EPSG:4326 o no tiene CRS, usar modo lineal (None)
+            # Si está en otra proyección (ej: GOES), pasar el CRS para reproyectar correctamente
+            target_crs = None
+            if crs is not None:
+                crs_str = crs.to_string() if hasattr(crs, 'to_string') else str(crs)
+                if crs_str != 'EPSG:4326':
+                    target_crs = crs_str
+            
             # Inicializar MapDrawer
-            mapper = MapDrawer(lanot_dir=lanot_dir, target_crs=None)
+            mapper = MapDrawer(lanot_dir=lanot_dir, target_crs=target_crs)
             mapper.set_image(img)
             mapper.set_bounds(lon_min, lat_max, lon_max, lat_min)
             
@@ -376,7 +388,7 @@ def create_color_png(data_array, output_path, color_table_path=None, bounds=None
             # Dibujar fecha/hora en esquina inferior izquierda (posición 2)
             if timestamp is not None:
                 try:
-                    mapper.draw_fecha(timestamp, position=2, fontsize=16, color='yellow')
+                    mapper.draw_fecha(timestamp, position=3, fontsize=16, color='yellow')
                 except Exception as e:
                     print(f"  No se pudo dibujar fecha: {e}")
             
@@ -392,7 +404,7 @@ def create_color_png(data_array, output_path, color_table_path=None, bounds=None
                 items = [(etiquetas[v], default_colors[v]) for v in orden if v in default_colors]
                 # Colocar la leyenda encima de la fecha (fecha: position=2),
                 # aplicando un desplazamiento vertical sencillo.
-                mapper.draw_legend(items=items, position=2, fontsize=14, border_color='black', vertical_offset=40)
+                mapper.draw_legend(items=items, position=2, fontsize=14, border_color='black') #, vertical_offset=40)
             except Exception as e:
                 print(f"  No se pudo dibujar la leyenda: {e}")
                 
@@ -732,11 +744,12 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False):
                     # Ya está en coordenadas geográficas
                     png_bounds = (bounds_array[0], bounds_array[3], bounds_array[2], bounds_array[1])
                 else:
-                    # Reproyectar esquinas a EPSG:4326 para el mapa
+                    # Para otras proyecciones (ej: GOES), transformar las esquinas a EPSG:4326
+                    # MapDrawer se encargará de manejar correctamente la proyección
                     from pyproj import Transformer
                     transformer = Transformer.from_crs(output_da.rio.crs, "EPSG:4326", always_xy=True)
                     
-                    # Transformar esquinas
+                    # Transformar las esquinas para obtener límites aproximados
                     lon_min, lat_min = transformer.transform(bounds_array[0], bounds_array[1])
                     lon_max, lat_max = transformer.transform(bounds_array[2], bounds_array[3])
                     
@@ -753,7 +766,8 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False):
             png_path, 
             cpt_path if cpt_path.exists() else None,
             bounds=png_bounds,
-            timestamp=image_time_dt
+            timestamp=image_time_dt,
+            crs=output_da.rio.crs
         )
 
 if __name__ == "__main__":

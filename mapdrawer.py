@@ -66,10 +66,48 @@ class MapDrawer:
         self.bounds['lry'] = lry
 
         if self.use_proj:
-            # Proyectamos las esquinas para saber cuánto mide la imagen en metros/unidades
-            # Asumimos que la imagen está alineada al norte (no rotada)
-            x_min, y_max = self.transformer.transform(ulx, uly)
-            x_max, y_min = self.transformer.transform(lrx, lry)
+            # Para proyecciones curvas (como GOES), muestrear el perímetro
+            # para obtener los límites correctos en el espacio proyectado
+            import numpy as np
+            
+            n_samples = 50
+            edge_lon = []
+            edge_lat = []
+            
+            # Borde superior e inferior
+            lon_samples = np.linspace(ulx, lrx, n_samples)
+            edge_lon.extend(lon_samples)
+            edge_lat.extend([uly] * n_samples)
+            edge_lon.extend(lon_samples)
+            edge_lat.extend([lry] * n_samples)
+            
+            # Borde izquierdo y derecho
+            lat_samples = np.linspace(lry, uly, n_samples)
+            edge_lon.extend([ulx] * n_samples)
+            edge_lat.extend(lat_samples)
+            edge_lon.extend([lrx] * n_samples)
+            edge_lat.extend(lat_samples)
+            
+            # Transformar todos los puntos del perímetro
+            x_vals, y_vals = self.transformer.transform(edge_lon, edge_lat)
+            
+            # Filtrar valores inválidos
+            x_vals = np.array(x_vals)
+            y_vals = np.array(y_vals)
+            valid_mask = np.isfinite(x_vals) & np.isfinite(y_vals)
+            
+            if np.any(valid_mask):
+                x_valid = x_vals[valid_mask]
+                y_valid = y_vals[valid_mask]
+                
+                x_min = np.min(x_valid)
+                x_max = np.max(x_valid)
+                y_min = np.min(y_valid)
+                y_max = np.max(y_valid)
+            else:
+                # Fallback: usar solo las esquinas
+                x_min, y_max = self.transformer.transform(ulx, uly)
+                x_max, y_min = self.transformer.transform(lrx, lry)
             
             self.proj_bounds = {
                 'min_x': x_min, 'max_y': y_max,
@@ -292,10 +330,14 @@ class MapDrawer:
                 # Si todas fallan, usar fuente por defecto
                 font = aggdraw.Font(color, size=fontsize)
             
-            # Calcular posición del texto
-            # Aproximación del ancho del texto (8 píxeles por carácter es razonable)
-            text_width = len(fecha_str) * int(fontsize * 0.6)
-            text_height = fontsize + 4
+            # Calcular el tamaño real del texto renderizado
+            try:
+                # aggdraw.Draw.textsize() devuelve (width, height) del texto
+                text_width, text_height = draw.textsize(fecha_str, font)
+            except:
+                # Fallback: aproximación si textsize no está disponible
+                text_width = len(fecha_str) * int(fontsize * 0.65)
+                text_height = int(fontsize * 1.2)
             
             pos_x = position & 1
             pos_y = position >> 1
