@@ -14,6 +14,14 @@ try:
 except ImportError:
     HAS_PYPROJ = False
 
+# Proyecciones GOES predefinidas
+GOES_PROJECTIONS = {
+    'goes16': '+proj=geos +h=35786023.0 +lon_0=-75.0 +sweep=x +a=6378137.0 +b=6356752.31414 +units=m +no_defs',
+    'goes17': '+proj=geos +h=35786023.0 +lon_0=-137.0 +sweep=x +a=6378137.0 +b=6356752.31414 +units=m +no_defs',
+    'goes18': '+proj=geos +h=35786023.0 +lon_0=-137.0 +sweep=x +a=6378137.0 +b=6356752.31414 +units=m +no_defs',
+    'goes19': '+proj=geos +h=35786023.0 +lon_0=-75.0 +sweep=x +a=6378137.0 +b=6356752.31414 +units=m +no_defs',
+}
+
 class MapDrawer:
     def __init__(self, lanot_dir='/usr/local/share/lanot', target_crs=None):
         """
@@ -21,7 +29,8 @@ class MapDrawer:
         
         Args:
             lanot_dir (str): Ruta base de los recursos (shapefiles/logos).
-            target_crs (str, opcional): Código EPSG (ej. 'epsg:3857' para Web Mercator).
+            target_crs (str, opcional): Código EPSG (ej. 'epsg:3857'), string Proj4, 
+                                        o clave corta GOES ('goes16', 'goes17', 'goes18').
                                         Si es None, usa proyección lineal (Plate Carrée).
         """
         self.lanot_dir = lanot_dir
@@ -41,9 +50,17 @@ class MapDrawer:
         self.transformer = None
         
         if target_crs:
+            # Resolver claves cortas de GOES
+            crs_lower = target_crs.lower()
+            if crs_lower in GOES_PROJECTIONS:
+                resolved_crs = GOES_PROJECTIONS[crs_lower]
+                print(f"Info: Resolviendo '{target_crs}' a proyección GOES.")
+            else:
+                resolved_crs = target_crs
+            
             if HAS_PYPROJ:
                 # 'always_xy=True' asegura el orden (lon, lat)
-                self.transformer = Transformer.from_crs("epsg:4326", target_crs, always_xy=True)
+                self.transformer = Transformer.from_crs("epsg:4326", resolved_crs, always_xy=True)
                 self.use_proj = True
                 print(f"Info: Usando proyección {target_crs} vía pyproj.")
             else:

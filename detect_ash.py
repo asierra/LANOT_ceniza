@@ -352,12 +352,23 @@ def create_color_png(data_array, output_path, color_table_path=None, bounds=None
             
             # Determinar si necesitamos usar proyección o modo lineal
             # Si la imagen está en EPSG:4326 o no tiene CRS, usar modo lineal (None)
-            # Si está en otra proyección (ej: GOES), pasar el CRS para reproyectar correctamente
+            # Si está en otra proyección (ej: GOES), convertir a clave corta si es posible
             target_crs = None
             if crs is not None:
                 crs_str = crs.to_string() if hasattr(crs, 'to_string') else str(crs)
                 if crs_str != 'EPSG:4326':
-                    target_crs = crs_str
+                    # Intentar detectar si es una proyección GOES y usar clave corta
+                    proj4_str = crs.to_proj4() if hasattr(crs, 'to_proj4') else crs_str
+                    
+                    # Detectar GOES-16 (lon_0=-75)
+                    if 'geos' in proj4_str.lower() and 'lon_0=-75' in proj4_str:
+                        target_crs = 'goes16'
+                    # Detectar GOES-17/18 (lon_0=-137)
+                    elif 'geos' in proj4_str.lower() and 'lon_0=-137' in proj4_str:
+                        target_crs = 'goes18'  # Usar goes18 como default para -137
+                    else:
+                        # Usar el CRS completo si no es GOES o no se reconoce
+                        target_crs = crs_str
             
             # Inicializar MapDrawer
             mapper = MapDrawer(lanot_dir=lanot_dir, target_crs=target_crs)
