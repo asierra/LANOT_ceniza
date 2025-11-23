@@ -76,7 +76,28 @@ El sistema utiliza múltiples canales infrarrojos y productos derivados para:
 - **aggdraw**: Dibujo de vectores de alta calidad sobre imágenes PNG
 - **pyshp**: Lectura de archivos shapefile para mapas base
 
+### Instalación de MapDrawer (CLI)
+
+Para utilizar la herramienta de dibujo de mapas `mapdrawer.py` como un comando del sistema (`mapdrawer`), sigue estos pasos:
+
+1. **Hacer ejecutable el script:**
+   ```bash
+   chmod +x mapdrawer.py
+   ```
+
+2. **Crear un enlace simbólico (requiere permisos de administrador):**
+   ```bash
+   sudo ln -s $(pwd)/mapdrawer.py /usr/local/bin/mapdrawer
+   ```
+
+3. **Verificar la instalación:**
+   ```bash
+   mapdrawer --help
+   ```
+
 ## Uso
+
+### Detección de Ceniza (detect_ash.py)
 
 ### Ejecución básica
 
@@ -224,6 +245,42 @@ Cuando se usa reproyección a coordenadas geográficas (opciones que terminan en
 # Con PNG
 ./detect_ash.py --moment 20191001731 --clip popocatepetlgeo --png
 # Genera: ceniza_20191001731_geo.tif y ceniza_20191001731_geo.png
+```
+
+### Dibujado de Mapas (mapdrawer)
+
+La herramienta `mapdrawer` permite dibujar mapas base, logos, fechas y leyendas sobre imágenes existentes desde la línea de comandos.
+
+#### Ejecución básica
+
+```bash
+mapdrawer imagen_entrada.png --output imagen_salida.png --crs goes16 --recorte centromex
+```
+
+#### Parámetros principales
+
+- `input_image`: Ruta de la imagen de entrada (obligatorio).
+- `--output`: Ruta de salida (opcional, por defecto sobreescribe).
+- `--crs`: Sistema de coordenadas de la imagen. Soporta claves cortas (`goes16`, `goes17`, `goes18`) o códigos EPSG (`epsg:4326`).
+- `--bounds`: Límites geográficos manuales (ulx uly lrx lry).
+- `--recorte`: Nombre de un recorte predefinido (ej: `centromex`, `Mexico`).
+- `--layer`: Capa a dibujar en formato `NOMBRE:COLOR:GROSOR`. Se puede repetir.
+  - Ej: `--layer COASTLINE:cyan:0.5 --layer MEXSTATES:white:1.0`
+- `--logo-pos`: Posición del logo (0-3).
+- `--timestamp`: Texto de fecha/hora.
+- `--cpt`: Archivo de paleta de colores para generar leyenda.
+
+#### Ejemplo completo
+
+```bash
+mapdrawer ceniza.png \
+  --crs goes16 \
+  --recorte centromex \
+  --layer COASTLINE:cyan:0.5 \
+  --layer MEXSTATES:white:1.0 \
+  --logo-pos 1 \
+  --timestamp "2023/11/23 12:00 UTC" \
+  --cpt ash.cpt
 ```
 
 ## Estructura del proyecto

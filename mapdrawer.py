@@ -465,28 +465,144 @@ class MapDrawer:
 
         draw.flush()
 
+    def parse_cpt(self, cpt_path):
+        """
+        Parsea un archivo CPT y devuelve una lista de items para la leyenda.
+        Soporta formato discreto simple: valor r g b [etiqueta]
+        """
+        items = []
+        if not os.path.exists(cpt_path):
+            print(f"Advertencia: CPT {cpt_path} no encontrado.")
+            return items
+
+        try:
+            with open(cpt_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith(('#', 'B', 'F', 'N')):
+                        continue
+                    
+                    parts = line.split()
+                    # Formato esperado discreto: val r g b [label]
+                    if len(parts) >= 4:
+                        try:
+                            # Intentamos parsear r,g,b
+                            r, g, b = int(parts[1]), int(parts[2]), int(parts[3])
+                            color = (r, g, b)
+                            
+                            # Etiqueta
+                            if len(parts) > 4:
+                                # Si hay más partes, unimos el resto como etiqueta
+                                label = " ".join(parts[4:])
+                            else:
+                                label = parts[0]
+                            
+                            items.append((label, color))
+                        except ValueError:
+                            # Si falla conversión a int, saltamos
+                            continue
+        except Exception as e:
+            print(f"Error leyendo CPT: {e}")
+            
+        return items
+
 # --- Bloque Principal para pruebas ---
 if __name__ == "__main__":
-    # Ejemplo de uso
-    print("Prueba de MapDrawer Modernizado")
+    import argparse
+    import sys
+    from datetime import datetime
+
+    parser = argparse.ArgumentParser(description="Herramienta de línea de comandos para dibujar mapas y decoraciones en imágenes.")
     
-    # 1. Instancia (opcionalmente pasas target_crs='epsg:3857' para probar pyproj)
-    # Si no pasas nada, funciona como tu script original.
-    mapper = MapDrawer(lanot_dir='./lanot_fake', target_crs=None)
+    parser.add_argument("input_image", help="Ruta de la imagen de entrada (PNG, JPG, etc.)")
+    parser.add_argument("--output", help="Ruta de la imagen de salida. Por defecto sobreescribe la entrada.")
     
-    # 2. Crear imagen dummy
-    img = Image.new('RGB', (800, 600), 'black')
+    # Límites
+    group_bounds = parser.add_mutually_exclusive_group()
+    group_bounds.add_argument("--bounds", nargs=4, type=float, metavar=('ULX', 'ULY', 'LRX', 'LRY'), 
+                              help="Límites geográficos: ulx uly lrx lry")
+    group_bounds.add_argument("--recorte", help="Nombre del recorte definido en recortes_coordenadas.csv")
+    
+    # Capas
+    parser.add_argument("--layer", action="append", 
+                        help="Capa a dibujar: NOMBRE:COLOR:GROSOR (ej: COASTLINE:blue:0.5)")
+    
+    # Proyección
+    parser.add_argument("--crs", help="Sistema de coordenadas (ej: 'goes16', 'epsg:4326').")
+    
+    # Logo
+    parser.add_argument("--logo-pos", type=int, choices=[0, 1, 2, 3], help="Posición del logo (0-3)")
+    parser.add_argument("--logo-size", type=int, help="Tamaño del logo en píxeles")
+    
+    # Fecha
+    parser.add_argument("--timestamp", help="Texto de la fecha/hora. Si no se da, intenta extraer del nombre o usa actual.")
+    parser.add_argument("--timestamp-pos", type=int, choices=[0, 1, 2, 3], default=2, help="Posición de la fecha (0-3)")
+    parser.add_argument("--font-size", type=int, default=15, help="Tamaño de fuente")
+    parser.add_argument("--font-color", default="yellow", help="Color de fuente")
+    
+    # Leyenda
+    parser.add_argument("--cpt", help="Archivo CPT para generar leyenda")
+    
+    args = parser.parse_args()
+    
+    # 1. Cargar imagen
+    if not os.path.exists(args.input_image):
+        print(f"Error: Imagen {args.input_image} no encontrada.")
+        sys.exit(1)
+        
+    try:
+        img = Image.open(args.input_image).convert("RGB") # Asegurar RGB para dibujar
+    except Exception as e:
+        print(f"Error abriendo imagen: {e}")
+        sys.exit(1)
+        
+    # 2. Inicializar MapDrawer
+    mapper = MapDrawer(target_crs=args.crs)
     mapper.set_image(img)
     
-    # 3. Definir límites (Ejemplo: México)
-    # mapper.load_bounds_from_csv("Mexico") o manual:
-    mapper.set_bounds(-118.0, 33.0, -86.0, 14.0)
+    # 3. Establecer límites
+    bounds_set = False
+    if args.bounds:
+        mapper.set_bounds(*args.bounds)
+        bounds_set = True
+    elif args.recorte:
+        if mapper.load_bounds_from_csv(args.recorte):
+            bounds_set = True
     
-    # 4. Dibujar (asumiendo que existen los archivos en las rutas relativas)
-    # mapper.draw_shapefile('shapefiles/ne_10m_coastline.shp', color='cyan')
-    
+    # 4. Dibujar capas
+    if args.layer and bounds_set:
+        for layer_def in args.layer:
+            parts = layer_def.split(':')
+            name = parts[0]
+            color = parts[1] if len(parts) > 1 else 'yellow'
+            width = float(parts[2]) if len(parts) > 2 else 0.5
+            mapper.draw_layer(name, color=color, width=width)
+    elif args.layer and not bounds_set:
+        print("Advertencia: Se pidieron capas pero no se definieron límites (--bounds o --recorte).")
+
     # 5. Logo
-    # mapper.draw_logo()
+    if args.logo_pos is not None:
+        size = args.logo_size if args.logo_size else 128
+        mapper.draw_logo(logosize=size, position=args.logo_pos)
+        
+    # 6. Fecha
+    ts = args.timestamp
+    if not ts:
+        # Intentar extraer del nombre (YYYYjjjHHMM)
+        # Implementación simple o usar fecha actual
+        ts = datetime.utcnow().strftime("%Y/%m/%d %H:%MZ")
+        
+    mapper.draw_fecha(ts, position=args.timestamp_pos, fontsize=args.font_size, color=args.font_color)
     
-    # img.save("test_output.png")
-    print("Proceso finalizado (sin guardar imagen en demo).")
+    # 7. Leyenda
+    if args.cpt:
+        items = mapper.parse_cpt(args.cpt)
+        if items:
+            # Si hay fecha en la misma posición, desplazar leyenda
+            v_offset = 40 if args.timestamp_pos == args.timestamp_pos else 0
+            mapper.draw_legend(items, position=args.timestamp_pos, fontsize=args.font_size, vertical_offset=v_offset)
+            
+    # 8. Guardar
+    output_path = args.output if args.output else args.input_image
+    img.save(output_path)
+    print(f"Imagen guardada en {output_path}")
