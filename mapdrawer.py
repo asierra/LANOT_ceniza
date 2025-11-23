@@ -6,6 +6,7 @@ import csv
 from PIL import Image
 import aggdraw
 import shapefile as shp
+import math
 
 # Intentamos importar pyproj. Si no existe, el programa sigue funcionando en modo lineal.
 try:
@@ -20,6 +21,35 @@ GOES_PROJECTIONS = {
     'goes17': '+proj=geos +h=35786023.0 +lon_0=-137.0 +sweep=x +a=6378137.0 +b=6356752.31414 +units=m +no_defs',
     'goes18': '+proj=geos +h=35786023.0 +lon_0=-137.0 +sweep=x +a=6378137.0 +b=6356752.31414 +units=m +no_defs',
     'goes19': '+proj=geos +h=35786023.0 +lon_0=-75.0 +sweep=x +a=6378137.0 +b=6356752.31414 +units=m +no_defs',
+}
+
+# Regiones predefinidas (ulx, uly, lrx, lry)
+# Valores típicos para GOES-16 (East)
+PREDEFINED_REGIONS = {
+    'conus': (-152.1093, 56.76145, -52.94688, 14.57134),
+    # Para Full Disk, definimos lat/lon aproximados, pero MapDrawer
+    # usará límites en metros hardcoded si detecta esta clave y proyección GOES.
+    'fulldisk': (-156.2995, 81.3282, 6.2995, -81.3282),
+    'fd': (-156.2995, 81.3282, 6.2995, -81.3282),
+}
+
+# Límites en metros para Full Disk GOES-R (ABI)
+# h * 0.151872 radians
+GOES_FD_EXTENT_METERS = {
+    'min_x': -5434894.885056,
+    'max_y': 5434894.885056,
+    'width': 10869789.770112,
+    'height': -10869789.770112 # Negativo porque y_min - y_max
+}
+
+# Límites en metros para CONUS GOES-16 (East)
+# x_rad: [-0.101360, 0.038640], y_rad: [0.128240, 0.044240]
+# h = 35786023.0
+GOES_CONUS_EXTENT_METERS = {
+    'min_x': -3627271.29,
+    'max_y': 4589200.59,
+    'width': 5010043.22,
+    'height': -3006025.93
 }
 
 class MapDrawer:
@@ -133,6 +163,38 @@ class MapDrawer:
             }
 
     def load_bounds_from_csv(self, recorte_name, csv_path=None):
+        # Verificar primero regiones predefinidas (hardcoded)
+        name_lower = recorte_name.lower()
+        if name_lower in PREDEFINED_REGIONS:
+            # Caso especial: Full Disk con proyección GOES
+            if name_lower in ('fd', 'fulldisk') and self.use_proj:
+                # Usar límites en metros directos para evitar problemas de proyección en las esquinas
+                self.proj_bounds = GOES_FD_EXTENT_METERS.copy()
+                # También establecemos bounds lat/lon referenciales (aunque no se usen para el mapeo)
+                vals = PREDEFINED_REGIONS[name_lower]
+                self.bounds['ulx'] = vals[0]
+                self.bounds['uly'] = vals[1]
+                self.bounds['lrx'] = vals[2]
+                self.bounds['lry'] = vals[3]
+                print(f"Info: Usando límites Full Disk GOES en metros: {self.proj_bounds}")
+                return True
+            
+            # Caso especial: CONUS con proyección GOES (Asumiendo GOES-16/East)
+            if name_lower == 'conus' and self.use_proj:
+                self.proj_bounds = GOES_CONUS_EXTENT_METERS.copy()
+                vals = PREDEFINED_REGIONS[name_lower]
+                self.bounds['ulx'] = vals[0]
+                self.bounds['uly'] = vals[1]
+                self.bounds['lrx'] = vals[2]
+                self.bounds['lry'] = vals[3]
+                print(f"Info: Usando límites CONUS GOES en metros: {self.proj_bounds}")
+                return True
+            
+            vals = PREDEFINED_REGIONS[name_lower]
+            self.set_bounds(*vals)
+            print(f"Info: Usando región predefinida '{recorte_name}': {vals}")
+            return True
+
         if csv_path is None:
             csv_path = os.path.join(self.lanot_dir, "docs/recortes_coordenadas.csv")
         
@@ -154,13 +216,19 @@ class MapDrawer:
             return False
 
     def _geo2pixel(self, lon, lat):
-        """Convierte lon/lat a u/v (píxeles) usando la estrategia activa."""
+        """Convierte lon/lat a u/v (píxeles) usando la estrategia activa.
+           Devuelve None si la proyección falla (infinito/nan).
+        """
         w = self.image.width
         h = self.image.height
         
         if self.use_proj:
             # 1. Proyectar punto (Lat/Lon -> Metros)
             x_p, y_p = self.transformer.transform(lon, lat)
+            
+            # Verificar si el resultado es finito
+            if not (math.isfinite(x_p) and math.isfinite(y_p)):
+                return None
             
             # 2. Interpolar en el plano proyectado
             pb = self.proj_bounds
@@ -233,7 +301,16 @@ class MapDrawer:
                     # Clipping suave para evitar coordenadas locas fuera de imagen
                     if (b['ulx'] - margin < lon < b['lrx'] + margin and 
                         b['lry'] - margin < lat < b['uly'] + margin):
-                        u, v = self._geo2pixel(lon, lat)
+                        
+                        res = self._geo2pixel(lon, lat)
+                        if res is None:
+                            # Si la proyección falla (punto infinito/inválido), cortamos la línea
+                            if len(pixel_coords) >= 4:
+                                draw.line(pixel_coords, pen)
+                            pixel_coords = []
+                            continue
+                            
+                        u, v = res
                         pixel_coords.extend((u, v))
                     else:
                         # Si el segmento se sale, dibujamos lo que llevamos y reiniciamos
@@ -510,7 +587,7 @@ class MapDrawer:
 if __name__ == "__main__":
     import argparse
     import sys
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     parser = argparse.ArgumentParser(description="Herramienta de línea de comandos para dibujar mapas y decoraciones en imágenes.")
     
@@ -589,8 +666,22 @@ if __name__ == "__main__":
     ts = args.timestamp
     if not ts:
         # Intentar extraer del nombre (YYYYjjjHHMM)
-        # Implementación simple o usar fecha actual
-        ts = datetime.utcnow().strftime("%Y/%m/%d %H:%MZ")
+        import re
+        # Buscamos 4 digitos (año), 3 digitos (dia juliano), 4 digitos (hora minuto)
+        match = re.search(r"(\d{4})(\d{3})(\d{4})", os.path.basename(args.input_image))
+        if match:
+            yyyy, jjj, hhmm = match.groups()
+            try:
+                # Convertir a datetime
+                dt = datetime.strptime(f"{yyyy}{jjj}{hhmm}", "%Y%j%H%M")
+                ts = dt.strftime("%Y/%m/%d %H:%MZ")
+                print(f"Fecha extraída del nombre: {ts}")
+            except ValueError:
+                print("Advertencia: Patrón de fecha encontrado pero inválido. Usando fecha actual.")
+                ts = datetime.now(timezone.utc).strftime("%Y/%m/%d %H:%MZ")
+        else:
+            # Si no se encuentra patrón, usar fecha actual
+            ts = datetime.now(timezone.utc).strftime("%Y/%m/%d %H:%MZ")
         
     mapper.draw_fecha(ts, position=args.timestamp_pos, fontsize=args.font_size, color=args.font_color)
     
