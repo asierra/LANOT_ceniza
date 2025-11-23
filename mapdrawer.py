@@ -614,7 +614,7 @@ if __name__ == "__main__":
     # Fecha
     parser.add_argument("--timestamp", help="Texto de la fecha/hora. Si no se da, intenta extraer del nombre o usa actual.")
     parser.add_argument("--timestamp-pos", type=int, choices=[0, 1, 2, 3], default=2, help="Posición de la fecha (0-3)")
-    parser.add_argument("--font-size", type=int, default=15, help="Tamaño de fuente")
+    parser.add_argument("--font-size", type=int, help="Tamaño de fuente (por defecto: 1.5% del ancho de la imagen)")
     parser.add_argument("--font-color", default="yellow", help="Color de fuente")
     
     # Leyenda
@@ -632,6 +632,21 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Error abriendo imagen: {e}")
         sys.exit(1)
+        
+    # Calcular tamaños dinámicos si no se especifican
+    img_width = img.width
+    
+    # Logo: 10% del ancho, mínimo 64px
+    if args.logo_size:
+        logo_size = args.logo_size
+    else:
+        logo_size = max(64, int(img_width * 0.10))
+        
+    # Fuente: 1.5% del ancho, mínimo 15px
+    if args.font_size:
+        font_size = args.font_size
+    else:
+        font_size = max(15, int(img_width * 0.015))
         
     # 2. Inicializar MapDrawer
     mapper = MapDrawer(target_crs=args.crs)
@@ -659,8 +674,7 @@ if __name__ == "__main__":
 
     # 5. Logo
     if args.logo_pos is not None:
-        size = args.logo_size if args.logo_size else 128
-        mapper.draw_logo(logosize=size, position=args.logo_pos)
+        mapper.draw_logo(logosize=logo_size, position=args.logo_pos)
         
     # 6. Fecha
     ts = args.timestamp
@@ -683,15 +697,16 @@ if __name__ == "__main__":
             # Si no se encuentra patrón, usar fecha actual
             ts = datetime.now(timezone.utc).strftime("%Y/%m/%d %H:%MZ")
         
-    mapper.draw_fecha(ts, position=args.timestamp_pos, fontsize=args.font_size, color=args.font_color)
+    mapper.draw_fecha(ts, position=args.timestamp_pos, fontsize=font_size, color=args.font_color)
     
     # 7. Leyenda
     if args.cpt:
         items = mapper.parse_cpt(args.cpt)
         if items:
             # Si hay fecha en la misma posición, desplazar leyenda
-            v_offset = 40 if args.timestamp_pos == args.timestamp_pos else 0
-            mapper.draw_legend(items, position=args.timestamp_pos, fontsize=args.font_size, vertical_offset=v_offset)
+            # Ajustar offset vertical basado en el tamaño de fuente
+            v_offset = int(font_size * 2.5) if args.timestamp_pos == args.timestamp_pos else 0
+            mapper.draw_legend(items, position=args.timestamp_pos, fontsize=font_size, vertical_offset=v_offset)
             
     # 8. Guardar
     output_path = args.output if args.output else args.input_image
