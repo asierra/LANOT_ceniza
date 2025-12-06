@@ -77,27 +77,51 @@ def get_moment(is_conus=True):
     return moment
 
 
-def get_filelist_from_path(data_path, moment, products):
+def get_filelist_from_path(data_path, moment, products, use_date_tree=False):
     """
     Busca archivos en un directorio que coincidan con un momento 'YYYYjjjhhmm" 
     y que contengan uno de los identificadores de 'products' en su nombre.
     
     Si hay duplicados (CG_ y OR_), da preferencia a los que empiezan con CG_.
+    
+    Args:
+        data_path (Path): Ruta base donde buscar los archivos
+        moment (str): Momento en formato 'YYYYjjjHHMM'
+        products (list): Lista de productos a buscar
+        use_date_tree (bool): Si True, usa la estructura YYYY/MM/DD derivada de moment.
+                              Si False (por defecto), busca directamente en data_path.
     """
+    
+    # Si use_date_tree es True, construir la ruta con estructura de fecha
+    if use_date_tree:
+        # Parsear el momento: YYYYjjjHHMM
+        year = moment[:4]
+        julian_day = moment[4:7]
+        
+        # Convertir día juliano a mes/día
+        from datetime import datetime
+        date_obj = datetime.strptime(f"{year}{julian_day}", "%Y%j")
+        month = f"{date_obj.month:02d}"
+        day = f"{date_obj.day:02d}"
+        
+        # Construir la ruta completa
+        search_path = data_path / year / month / day
+    else:
+        search_path = data_path
     
     patron_base = f"*s{moment}*.nc"
 
-    print(f"Buscando archivos en: {data_path}")
+    print(f"Buscando archivos en: {search_path}")
     print(f"Usando patrón base: {patron_base}")
     print(f"Filtrando por productos: {products}")
 
     # Comprobar si el directorio existe antes de buscar
-    if not data_path.is_dir():
-        print(f"Error: El directorio '{data_path}' no existe. Por favor, comprueba la ruta.")
+    if not search_path.is_dir():
+        print(f"Error: El directorio '{search_path}' no existe. Por favor, comprueba la ruta.")
         return []
     
     # Obtenemos *todos* los archivos que coinciden con el tiempo (patrón base)
-    archivos_por_tiempo = data_path.glob(patron_base)
+    archivos_por_tiempo = search_path.glob(patron_base)
     
     # Diccionario para agrupar archivos por producto: producto -> lista de paths
     archivos_por_producto = {prod: [] for prod in products}
@@ -455,7 +479,7 @@ def create_color_png(data_array, output_path, color_table_path=None, bounds=None
     print(f"Imagen PNG guardada en: {output_path}")
 
 
-def main(data_path, moment, output_path, clip_region=None, create_png=False):
+def main(data_path, moment, output_path, clip_region=None, create_png=False, use_date_tree=False):
     """Función principal para ejecutar el proceso de detección de cenizas."""
     print(f"Iniciando detección para el momento: {moment}")
     
@@ -485,7 +509,7 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False):
     # NOTA: El archivo NAV ya no es necesario, se calculan lat/lon desde la proyección
     productos = ["ACTP", "C04", "C07", "C11", "C13", "C14", "C15"]
     
-    archivos = get_filelist_from_path(data_path, moment, productos)
+    archivos = get_filelist_from_path(data_path, moment, productos, use_date_tree=use_date_tree)
     if not archivos:
         print(f"Error: No se encontró ningún archivo con este momento {moment}.")
         return
@@ -890,6 +914,8 @@ if __name__ == "__main__":
     parser.add_argument('--clip', type=str, choices=list(CLIP_REGIONS_WITH_GEO.keys()), default=None, 
                         help=f"Región para recortar el resultado final. Agrega 'geo' al final para reproyectar a lat/lon. Opciones: {', '.join(CLIP_REGIONS.keys())} (o con sufijo 'geo')")
     parser.add_argument('--png', action='store_true', help="Genera también una imagen PNG a color con la misma resolución que el GeoTIFF")
+    parser.add_argument('--date-tree', action='store_true', 
+                        help="Usa estructura de directorios YYYY/MM/DD dentro de --path para localizar los archivos según el momento especificado")
     
     args = parser.parse_args()
 
@@ -915,9 +941,9 @@ if __name__ == "__main__":
         if args.clip and args.clip.endswith('geo'):
             output_file = Path(f"./ceniza_{moment_a_procesar}_geo.tif")
         else:
-            output_file = Path(f"./ceniza_{moment_a_procesar}.tif")
-
     # Descomentar para pruebas con datos específicos
     # moment_a_procesar = "20191001731"
+
+    main(args.path, moment_a_procesar, output_file, clip_region=args.clip, create_png=args.png, use_date_tree=args.date_tree)
 
     main(args.path, moment_a_procesar, output_file, clip_region=args.clip, create_png=args.png)
