@@ -941,9 +941,9 @@ if __name__ == "__main__":
         if args.clip and args.clip.endswith('geo'):
             output_file = Path(f"./ceniza_{moment_a_procesar}_geo.tif")
         else:
+            output_file = Path(f"./ceniza_{moment_a_procesar}.tif")
+
     # Descomentar para pruebas con datos específicos
     # moment_a_procesar = "20191001731"
 
     main(args.path, moment_a_procesar, output_file, clip_region=args.clip, create_png=args.png, use_date_tree=args.date_tree)
-
-    main(args.path, moment_a_procesar, output_file, clip_region=args.clip, create_png=args.png)
