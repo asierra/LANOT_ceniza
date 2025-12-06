@@ -81,6 +81,8 @@ def get_filelist_from_path(data_path, moment, products):
     """
     Busca archivos en un directorio que coincidan con un momento 'YYYYjjjhhmm" 
     y que contengan uno de los identificadores de 'products' en su nombre.
+    
+    Si hay duplicados (CG_ y OR_), da preferencia a los que empiezan con CG_.
     """
     
     patron_base = f"*s{moment}*.nc"
@@ -89,27 +91,52 @@ def get_filelist_from_path(data_path, moment, products):
     print(f"Usando patrón base: {patron_base}")
     print(f"Filtrando por productos: {products}")
 
-    lista_archivos = [] 
-
     # Comprobar si el directorio existe antes de buscar
     if not data_path.is_dir():
         print(f"Error: El directorio '{data_path}' no existe. Por favor, comprueba la ruta.")
-        # Se devolverá la lista vacía
-    else:
-        # Obtenemos *todos* los archivos que coinciden con el tiempo (patrón base)
-        archivos_por_tiempo = data_path.glob(patron_base)
+        return []
+    
+    # Obtenemos *todos* los archivos que coinciden con el tiempo (patrón base)
+    archivos_por_tiempo = data_path.glob(patron_base)
+    
+    # Diccionario para agrupar archivos por producto: producto -> lista de paths
+    archivos_por_producto = {prod: [] for prod in products}
+    
+    for p in archivos_por_tiempo:
+        for prod in products:
+            # Si el producto es una banda (ej. "C07"), busca también "CMIP" en el nombre.
+            if prod.startswith("C"):
+                if prod in p.name and "CMIP" in p.name:
+                    archivos_por_producto[prod].append(p)
+                    break
+            # Para otros productos (ej. "ACTP"), solo busca el producto.
+            else:
+                if prod in p.name:
+                    archivos_por_producto[prod].append(p)
+                    break
+    
+    # Resolver duplicados: preferir CG_ sobre OR_
+    lista_archivos = []
+    for prod in products:
+        candidatos = archivos_por_producto[prod]
         
-        # Filtramos la lista
-        lista_archivos = [
-            str(p) for p in archivos_por_tiempo 
-            if any(
-                # Si el producto es una banda (ej. "C07"), busca también "CMIP" en el nombre.
-                (prod in p.name and "CMIP" in p.name) if prod.startswith("C") 
-                # Para otros productos (ej. "ACTP"), solo busca el producto.
-                else (prod in p.name) 
-                for prod in products
-            )
-        ]
+        if len(candidatos) == 0:
+            continue
+        elif len(candidatos) == 1:
+            lista_archivos.append(str(candidatos[0]))
+        else:
+            # Hay duplicados: preferir CG_ sobre OR_
+            cg_files = [p for p in candidatos if p.name.startswith('CG_')]
+            if cg_files:
+                lista_archivos.append(str(cg_files[0]))
+                if len(cg_files) > 1 or len(candidatos) > len(cg_files):
+                    print(f"  Nota: Se encontraron {len(candidatos)} archivos para {prod}, usando {cg_files[0].name} (preferencia CG_)")
+            else:
+                # No hay CG_, usar el primero que encontremos
+                lista_archivos.append(str(candidatos[0]))
+                if len(candidatos) > 1:
+                    print(f"  Nota: Se encontraron {len(candidatos)} archivos para {prod}, usando {candidatos[0].name}")
+    
     return lista_archivos
     
 
