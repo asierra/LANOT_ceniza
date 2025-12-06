@@ -77,6 +77,56 @@ def get_moment(is_conus=True):
     return moment
 
 
+def normalize_moment(moment):
+    """
+    Normaliza el momento al formato juliano YYYYjjjHHMM.
+    
+    Detecta automáticamente si el momento está en formato:
+    - Juliano (11 dígitos): YYYYjjjHHMM - lo retorna sin cambios
+    - Gregoriano (12 dígitos): YYYYMMDDhhmm - lo convierte a juliano
+    
+    Args:
+        moment (str): Momento en formato juliano u gregoriano
+        
+    Returns:
+        tuple: (moment_julian, year, month, day) donde:
+            - moment_julian es el momento en formato YYYYjjjHHMM
+            - year, month, day son strings para construir rutas YYYY/MM/DD
+    """
+    from datetime import datetime
+    
+    if len(moment) == 12:
+        # Formato gregoriano: YYYYMMDDhhmm
+        year = moment[:4]
+        month = moment[4:6]
+        day = moment[6:8]
+        hhmm = moment[8:12]
+        
+        # Convertir a día juliano
+        date_obj = datetime.strptime(f"{year}{month}{day}", "%Y%m%d")
+        julian_day = f"{date_obj.timetuple().tm_yday:03d}"
+        
+        # Construir momento en formato juliano
+        moment_julian = f"{year}{julian_day}{hhmm}"
+        
+        print(f"Momento convertido de gregoriano {moment} a juliano {moment_julian}")
+        return moment_julian, year, month, day
+        
+    elif len(moment) == 11:
+        # Formato juliano: YYYYjjjHHMM
+        year = moment[:4]
+        julian_day = moment[4:7]
+        
+        # Convertir día juliano a mes/día
+        date_obj = datetime.strptime(f"{year}{julian_day}", "%Y%j")
+        month = f"{date_obj.month:02d}"
+        day = f"{date_obj.day:02d}"
+        
+        return moment, year, month, day
+    else:
+        raise ValueError(f"Formato de momento inválido: '{moment}'. Debe tener 11 dígitos (YYYYjjjHHMM) o 12 dígitos (YYYYMMDDhhmm)")
+
+
 def get_filelist_from_path(data_path, moment, products, use_date_tree=False):
     """
     Busca archivos en un directorio que coincidan con un momento 'YYYYjjjhhmm" 
@@ -86,30 +136,24 @@ def get_filelist_from_path(data_path, moment, products, use_date_tree=False):
     
     Args:
         data_path (Path): Ruta base donde buscar los archivos
-        moment (str): Momento en formato 'YYYYjjjHHMM'
+        moment (str): Momento en formato 'YYYYjjjHHMM' (juliano) o 'YYYYMMDDhhmm' (gregoriano)
         products (list): Lista de productos a buscar
         use_date_tree (bool): Si True, usa la estructura YYYY/MM/DD derivada de moment.
                               Si False (por defecto), busca directamente en data_path.
     """
     
+    # Normalizar el momento al formato juliano y extraer componentes de fecha
+    moment_julian, year, month, day = normalize_moment(moment)
+    
     # Si use_date_tree es True, construir la ruta con estructura de fecha
     if use_date_tree:
-        # Parsear el momento: YYYYjjjHHMM
-        year = moment[:4]
-        julian_day = moment[4:7]
-        
-        # Convertir día juliano a mes/día
-        from datetime import datetime
-        date_obj = datetime.strptime(f"{year}{julian_day}", "%Y%j")
-        month = f"{date_obj.month:02d}"
-        day = f"{date_obj.day:02d}"
-        
-        # Construir la ruta completa
+        # Construir la ruta completa usando los componentes de fecha
         search_path = data_path / year / month / day
     else:
         search_path = data_path
     
-    patron_base = f"*s{moment}*.nc"
+    # Usar el momento en formato juliano para buscar archivos
+    patron_base = f"*s{moment_julian}*.nc"
 
     print(f"Buscando archivos en: {search_path}")
     print(f"Usando patrón base: {patron_base}")
