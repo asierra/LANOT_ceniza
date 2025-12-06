@@ -603,6 +603,14 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False):
     
     print(f"Forma de los arrays cargados: {c07.shape}")
     
+    # Crear máscara de datos válidos (píxeles que tienen datos en todas las bandas)
+    # Si alguna banda tiene NaN, el píxel se marcará como sin datos
+    valid_data_mask = (
+        np.isfinite(c04) & np.isfinite(c07) & np.isfinite(c11) & 
+        np.isfinite(c13) & np.isfinite(c14) & np.isfinite(c15) & 
+        np.isfinite(phase)
+    )
+    
     # Calculamos lat/lon a partir de las coordenadas GOES x/y (ya recortadas)
     # Creamos una malla 2D con las coordenadas x/y
     x_2d, y_2d = np.meshgrid(x_coords, y_coords)
@@ -610,6 +618,9 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False):
     # Transformar de proyección GOES a lat/lon (EPSG:4326)
     transformer = Transformer.from_crs(crs_goes, "EPSG:4326", always_xy=True)
     lon, lat = transformer.transform(x_2d, y_2d)
+    
+    # Actualizar máscara: también marcar como inválidos los píxeles fuera del disco visible
+    valid_data_mask = valid_data_mask & np.isfinite(lon) & np.isfinite(lat)
     
     print(f"\n--- Coordenadas calculadas ---")
     print(f"Forma de lat/lon: {lat.shape}")
@@ -701,10 +712,15 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False):
     ]
     val_final = [3, 0, 0, 0]
     ceniza = np.select(cond_final, val_final, default=ceniza_um2)
+    
+    # Marcar píxeles sin datos válidos como 255 (nodata)
+    ceniza = ceniza.astype(np.uint8)
+    ceniza[~valid_data_mask] = 255
 
     print("\n--- Clasificación Final de Ceniza ---")
     print(f"Forma del array final: {ceniza.shape}")
     print(f"Valores únicos en la clasificación: {np.unique(ceniza)}")
+    print(f"Píxeles sin datos (nodata=255): {np.sum(~valid_data_mask)} de {ceniza.size} ({100*np.sum(~valid_data_mask)/ceniza.size:.2f}%)")
 
     # --- Guardado en GeoTIFF ---
     # Creamos un DataArray de xarray con el resultado, usando la plantilla geoespacial
@@ -752,8 +768,63 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False):
         print(f"CRS final: EPSG:4326 (lat/lon)")
 
     print(f"\nGuardando resultado en: {output_path}")
-    output_da.rio.to_raster(output_path, driver="GTiff", dtype="uint8", compress='LZW')
-    print("¡Archivo GeoTIFF guardado con éxito!")
+    
+    # Definir tabla de colores (hardcoded desde ash.cpt)
+    color_table = {
+        0: (0, 0, 0, 0),           # clear - transparente (sin ceniza detectada)
+        1: (255, 0, 0, 255),       # ash - rojo
+        2: (255, 165, 0, 255),     # probable - naranja
+        3: (255, 255, 0, 255),     # less probable - amarillo
+        4: (0, 255, 0, 255),       # cloud - verde
+        5: (0, 0, 255, 255),       # noise - azul
+        255: (0, 0, 0, 0)          # nodata - transparente (sin datos válidos)
+    }
+    
+    # Convertir a RGBA para que QGIS respete la transparencia
+    # Crear arrays separados para R, G, B, A
+    height, width = ceniza.shape
+    rgba = np.zeros((height, width, 4), dtype=np.uint8)
+    
+    for value, (r, g, b, a) in color_table.items():
+        mask = (ceniza == value)
+        rgba[mask, 0] = r  # Red
+        rgba[mask, 1] = g  # Green
+        rgba[mask, 2] = b  # Blue
+        rgba[mask, 3] = a  # Alpha
+    
+    # Guardar como GeoTIFF RGBA
+    import rasterio
+    from rasterio.transform import from_bounds
+    
+    # Obtener transform y CRS del DataArray original
+    transform = output_da.rio.transform()
+    crs = output_da.rio.crs
+    
+    with rasterio.open(
+        output_path,
+        'w',
+        driver='GTiff',
+        height=height,
+        width=width,
+        count=4,  # 4 bandas: R, G, B, A
+        dtype=rasterio.uint8,
+        crs=crs,
+        transform=transform,
+        compress='LZW',
+        photometric='RGB'
+    ) as dst:
+        dst.write(rgba[:, :, 0], 1)  # Red
+        dst.write(rgba[:, :, 1], 2)  # Green
+        dst.write(rgba[:, :, 2], 3)  # Blue
+        dst.write(rgba[:, :, 3], 4)  # Alpha
+        dst.colorinterp = [
+            rasterio.enums.ColorInterp.red,
+            rasterio.enums.ColorInterp.green,
+            rasterio.enums.ColorInterp.blue,
+            rasterio.enums.ColorInterp.alpha
+        ]
+    
+    print("¡Archivo GeoTIFF guardado con éxito (formato RGBA con transparencia)!")
     
     # Crear imagen PNG a color si se solicita
     if create_png:
