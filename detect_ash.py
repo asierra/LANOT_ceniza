@@ -599,8 +599,9 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False, use
     crs_goes = CRS.from_proj4(proj_string)
     
     # Obtener las coordenadas x e y completas
-    x_coords_full = ds_c07['x'].values * goes_proj.perspective_point_height
-    y_coords_full = ds_c07['y'].values * goes_proj.perspective_point_height
+    goes_height = float(goes_proj.perspective_point_height)
+    x_coords_full = ds_c07['x'].values.astype(np.float64) * goes_height
+    y_coords_full = ds_c07['y'].values.astype(np.float64) * goes_height
     
     # --- Determinar índices de recorte si se especificó una región ---
     if bbox:
@@ -610,8 +611,28 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False, use
         
         # Transformar coordenadas geográficas a proyección GOES
         transformer_to_goes = Transformer.from_crs("EPSG:4326", crs_goes, always_xy=True)
-        x_min, y_min = transformer_to_goes.transform(lon_min, lat_min)
-        x_max, y_max = transformer_to_goes.transform(lon_max, lat_max)
+        
+        # Si vamos a reproyectar a geográficas, expandir el bbox en proyección GOES
+        # para asegurar cobertura completa después de la reproyección
+        if reproject_to_geo:
+            # Expandir el bbox geográfico en ~10% en cada dirección
+            lon_margin = (lon_max - lon_min) * 0.1
+            lat_margin = (lat_max - lat_min) * 0.1
+            
+            lon_min_exp = lon_min - lon_margin
+            lon_max_exp = lon_max + lon_margin
+            lat_min_exp = lat_min - lat_margin
+            lat_max_exp = lat_max + lat_margin
+            
+            print(f"Bbox expandido para reproyección: lon[{lon_min_exp:.4f}, {lon_max_exp:.4f}], lat[{lat_min_exp:.4f}, {lat_max_exp:.4f}]")
+            
+            # Usar el bbox expandido para el recorte en GOES
+            x_min, y_min = transformer_to_goes.transform(lon_min_exp, lat_min_exp)
+            x_max, y_max = transformer_to_goes.transform(lon_max_exp, lat_max_exp)
+        else:
+            # Sin reproyección, usar el bbox exacto
+            x_min, y_min = transformer_to_goes.transform(lon_min, lat_min)
+            x_max, y_max = transformer_to_goes.transform(lon_max, lat_max)
         
         # Encontrar los índices más cercanos en los arrays de coordenadas
         # Para x (columnas)
@@ -644,19 +665,46 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False, use
         x_slice = slice(None)
         y_slice = slice(None)
     
-    # Configurar geo_template con la información espacial
+   # Configurar geo_template con la información espacial
     geo_template = ds_c07['CMI']
     
-    # --- Construir la geotransformación manualmente ---
-    # La geotransformación define cómo los píxeles se mapean a coordenadas espaciales.
-    # Formato: (x_res, rot_y, x_ul, rot_x, y_res, y_ul)
-    # 1. Calcular resolución (tamaño del píxel) en metros
-    x_res = x_coords[1] - x_coords[0]
-    y_res = y_coords[1] - y_coords[0] # Será negativo porque el origen es arriba-izquierda
-    # 2. Coordenada de la esquina superior izquierda (Upper Left)
-    x_ul = x_coords[0] - x_res / 2.0
-    y_ul = y_coords[0] - y_res / 2.0
-    # 3. Crear la matriz de transformación afín
+    # Aseguramos que la altura sea float nativo
+    goes_height = float(goes_proj.perspective_point_height)
+
+    # --- Construir la geotransformación manualmente (CORREGIDO) ---
+    try:
+        # CASO A: Metadatos presentes (vienen en Radianes -> Convertimos a Metros)
+        if 'scale_factor' in ds_c07['x'].attrs:
+            x_res_meters = float(ds_c07['x'].attrs['scale_factor']) * goes_height
+            y_res_meters = float(ds_c07['y'].attrs['scale_factor']) * goes_height
+        elif 'scale_factor' in ds_c07['x'].encoding:
+            x_res_meters = float(ds_c07['x'].encoding['scale_factor']) * goes_height
+            y_res_meters = float(ds_c07['y'].encoding['scale_factor']) * goes_height
+        else:
+            # CASO B: Sin metadatos, calculamos desde los datos
+            # IMPORTANTE: x_coords_full YA ESTÁN EN METROS (ver línea 538)
+            # Por lo tanto, NO multiplicamos por goes_height aquí.
+            x_res_meters = (x_coords_full[-1] - x_coords_full[0]) / (len(x_coords_full) - 1)
+            y_res_meters = (y_coords_full[-1] - y_coords_full[0]) / (len(y_coords_full) - 1)
+            
+    except Exception as e:
+        print(f"Advertencia: Usando resolución fallback para banda IR: {e}")
+        # Fallback (Radianes -> Metros)
+        x_res_meters = 0.000056 * goes_height
+        y_res_meters = -0.000056 * goes_height
+
+    # Debug para verificar que no sean valores astronómicos (debe ser ~2000.0)
+    print(f"Resolución calculada (m): X={x_res_meters:.2f}, Y={y_res_meters:.2f}")
+
+    # Normalizar signos y asignar
+    x_res = abs(x_res_meters)
+    y_res = -abs(y_res_meters) # Y negativo (Norte -> Sur)
+
+    # 4. Coordenada de la esquina superior izquierda (Upper Left)
+    # x_coords[0] es el CENTRO del píxel. Restamos medio píxel.
+    x_ul = x_coords[0] - (x_res / 2.0)
+    y_ul = y_coords[0] - (y_res / 2.0)
+    
     geotransform = Affine(x_res, 0.0, x_ul, 0.0, y_res, y_ul)
     
     # Leemos las demás variables, aplicando el recorte si es necesario
@@ -810,29 +858,51 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False, use
     if bbox and reproject_to_geo:
         print("\nReproyectando a coordenadas geográficas (EPSG:4326)...")
         
-        # Definir los límites en coordenadas geográficas
+        # Definir los límites EXACTOS en coordenadas geográficas (bbox original, sin expansión)
         # bbox = [lon_min, lat_max, lon_max, lat_min]
         lon_min, lat_max, lon_max, lat_min = bbox
         
-        # Calcular una resolución apropiada basada en el tamaño del recorte original
-        # Usamos aproximadamente el mismo número de píxeles
-        height, width = output_da.shape
+        print(f"Límites geográficos objetivo: lon[{lon_min}, {lon_max}], lat[{lat_min}, {lat_max}]")
         
-        # Calcular resolución en grados
+        # Calcular resolución y dimensiones objetivo
+        from rasterio.warp import Resampling
+        from affine import Affine
+        
+        # Definir una resolución objetivo razonable (~0.02° ≈ 2km)
+        # Esto es aproximadamente equivalente a la resolución GOES en esta latitud
+        target_resolution_deg = 0.02
+        
+        # Calcular las dimensiones necesarias para cubrir el bbox con esta resolución
         lon_range = lon_max - lon_min
         lat_range = lat_max - lat_min
-        lon_res = lon_range / width
-        lat_res = lat_range / height
         
-        print(f"Resolución objetivo: {lon_res:.6f}° (lon) x {lat_res:.6f}° (lat)")
+        dst_width = int(np.round(lon_range / target_resolution_deg))
+        dst_height = int(np.round(lat_range / target_resolution_deg))
         
-        # Reproyectar usando rioxarray
+        # Ahora calcular la resolución EXACTA necesaria para que el bbox sea preciso
+        exact_lon_res = lon_range / dst_width
+        exact_lat_res = lat_range / dst_height
+        
+        # Crear transformación afín exacta
+        dst_transform = Affine(
+            exact_lon_res, 0.0, lon_min,
+            0.0, -exact_lat_res, lat_max
+        )
+        
+        print(f"Resolución objetivo: lon={exact_lon_res:.6f}°, lat={exact_lat_res:.6f}°")
+        print(f"Dimensiones objetivo: {dst_height} x {dst_width} píxeles")
+        
+        # Reproyectar directamente con transformación y dimensiones exactas
         output_da = output_da.rio.reproject(
             dst_crs="EPSG:4326",
-            shape=(height, width),  # Mantener aproximadamente el mismo número de píxeles
-            resampling=0  # Nearest neighbor para datos categóricos
+            shape=(dst_height, dst_width),
+            transform=dst_transform,
+            resampling=Resampling.nearest,
+            nodata=255
         )
+        
         print(f"Forma después de reproyección: {output_da.shape}")
+        print(f"Límites después de reproyección: {output_da.rio.bounds()}")
         print(f"CRS final: EPSG:4326 (lat/lon)")
 
     print(f"\nGuardando resultado en: {output_path}")
@@ -849,12 +919,13 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False, use
     }
     
     # Convertir a RGBA para que QGIS respete la transparencia
-    # Crear arrays separados para R, G, B, A
-    height, width = ceniza.shape
+    # Usar los datos del output_da (que pueden estar reproyectados)
+    data_to_save = output_da.values
+    height, width = data_to_save.shape
     rgba = np.zeros((height, width, 4), dtype=np.uint8)
     
     for value, (r, g, b, a) in color_table.items():
-        mask = (ceniza == value)
+        mask = (data_to_save == value)
         rgba[mask, 0] = r  # Red
         rgba[mask, 1] = g  # Green
         rgba[mask, 2] = b  # Blue
