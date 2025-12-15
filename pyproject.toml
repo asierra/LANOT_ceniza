@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lanot_ceniza"
+version = "0.1.0"
+description = "Paquete mínimo instalable para LANOT_ceniza."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+  { name = "A. Sierra" },
+  { name = "Víctor Manuel Jiménez Escudero" }
+]
+keywords = ["ceniza volcánica", "tephra", "LANOT", "satélite", "detección"]
+dependencies = [
+  "numpy",
+  "skyfield",
+  "scipy",
+  "xarray",
+  "rioxarray",
+  "affine",
+  "netcdf4",
+  "pyproj",
+  "python-dateutil",
+  "Pillow",
+  "aggdraw",
+  "pyshp",
+  "matplotlib",
+]
+
+[project.urls]
+Repository = "https://github.com/asierra/LANOT_ceniza"
+Issues = "https://github.com/asierra/LANOT_ceniza/issues"
+
+[project.scripts]
+lanot-detect-ash = "lanot_ceniza._bridge_detect_ash:detect_ash_main"
+lanot-draw-map = "lanot_ceniza._bridge_mapdrawer:draw_map_main"
