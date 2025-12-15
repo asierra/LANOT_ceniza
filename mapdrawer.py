@@ -614,7 +614,7 @@ if __name__ == "__main__":
     # Fecha
     parser.add_argument("--timestamp", help="Texto de la fecha/hora. Si no se da, intenta extraer del nombre o usa actual.")
     parser.add_argument("--timestamp-pos", type=int, choices=[0, 1, 2, 3], default=2, help="Posición de la fecha (0-3)")
-    parser.add_argument("--font-size", type=int, help="Tamaño de fuente (por defecto: 1.5% del ancho de la imagen)")
+    parser.add_argument("--font-size", type=int, help="Tamaño de fuente (por defecto: 1.5%% del ancho de la imagen)")
     parser.add_argument("--font-color", default="yellow", help="Color de fuente")
     
     # Leyenda
