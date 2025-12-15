@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+title: "LANOT_ceniza"
+message: "Si utilizas este software, por favor cita con el siguiente formato."
+authors:
+  - family-names: "Aguilar Sierra"
+    given-names: "Alejandro"
+    orcid: "https://orcid.org/0000-0003-1018-8521"
+  - family-names: "Jiménez Escudero"
+    given-names: "Víctor Manuel"
+    orcid: "https://orcid.org/0009-0004-7521-7551"
+repository-code: "https://github.com/asierra/LANOT_ceniza"
+license: "MIT"
+keywords:
+  - ceniza volcánica
+  - tephra
+  - LANOT
+version: "1.0.0"
+doi: ""
+date-released: "2025-12-15"
+preferred-citation:
+  type: software
+  title: "LANOT_ceniza"
+  authors:
+    - family-names: "Sierra"
+      given-names: "A."
+    - family-names: "Jiménez Escudero"
+      given-names: "Víctor Manuel"
+  year: 2025
+  url: "https://github.com/asierra/LANOT_ceniza"

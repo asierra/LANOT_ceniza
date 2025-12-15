@@ -1,0 +1,27 @@
+{
+  "title": "LANOT_ceniza",
+  "upload_type": "software",
+  "description": "Herramientas y datos relacionados con ceniza volcánica del LANOT.",
+  "creators": [
+    {
+      "name": "Sierra, A.",
+      "orcid": "0000-0000-0000-0000",
+      "affiliation": "LANOT"
+    },
+    {
+      "name": "Jiménez Escudero, Víctor Manuel",
+      "orcid": "0000-0000-0000-0000",
+      "affiliation": "LANOT"
+    }
+  ],
+  "license": "MIT",
+  "keywords": ["ceniza volcánica", "tephra", "LANOT"],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/asierra/LANOT_ceniza",
+      "relation": "isSupplementTo",
+      "resource_type": "software"
+    }
+  ],
+  "notes": "Versión inicial estable."
+}
