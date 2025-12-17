@@ -22,7 +22,8 @@ l2_path = Path("/data/ceniza/l2")
 # Regiones predefinidas para recorte [lon_min, lat_max, lon_max, lat_min]
 CLIP_REGIONS = {
     'centromex': [-107.2319400, 22.7180385, -93.8363933, 14.9386282],
-    'popocatepetl': [-100.2622042, 20.5800993, -96.8495200, 18.2893953]
+    'popocatepetl': [-100.2622042, 20.5800993, -96.8495200, 18.2893953],
+    'ashpaper': [-102.418,22.474,-96.294,17.547],
 }
 
 # Generar versiones "geo" de las regiones automáticamente
@@ -109,7 +110,7 @@ def normalize_moment(moment):
         # Construir momento en formato juliano
         moment_julian = f"{year}{julian_day}{hhmm}"
         
-        print(f"Momento convertido de gregoriano {moment} a juliano {moment_julian}")
+        print(f"Momento {moment} (gregoriano) normalizado a {moment_julian} (juliano).")
         return moment_julian, year, month, day
         
     elif len(moment) == 11:
@@ -122,30 +123,135 @@ def normalize_moment(moment):
         month = f"{date_obj.month:02d}"
         day = f"{date_obj.day:02d}"
         
+        print(f"Momento {moment} (juliano) confirmado.")
         return moment, year, month, day
     else:
         raise ValueError(f"Formato de momento inválido: '{moment}'. Debe tener 11 dígitos (YYYYjjjHHMM) o 12 dígitos (YYYYMMDDhhmm)")
 
 
-def get_filelist_from_path(data_path, moment, products, use_date_tree=False):
+def parse_moment_string(moment_str, interval_minutes=5):
+    """
+    Parsea un string de momento, que puede ser un único momento o un rango.
+
+    Formatos soportados:
+    - Momento único (Gregoriano): 'YYYYMMDDHHMM' (12 dígitos)
+    - Momento único (Juliano): 'YYYYjjjHHMM' (11 dígitos)
+    - Rango (Gregoriano): 'YYYYMMDDHHmm-HHmm' (ej. '202402270800-1430')
+    - Rango (Juliano): 'YYYYjjjHHmm-HHmm' (ej. '20240580411-0426')
+
+    Args:
+        moment_str (str): El string de momento a parsear.
+        interval_minutes (int): El incremento en minutos para generar momentos en un rango (por defecto 5 min).
+
+    Returns:
+        list[tuple]: Una lista de tuplas. Cada tupla contiene:
+                     (moment_julian, year, month, day).
+                     Esto evita recalcular la información de fecha repetidamente.
+    """
+    if '-' in moment_str:
+        print(f"Detectado rango de momentos: {moment_str}")
+        
+        # Determinar si es formato gregoriano (17 chars) o juliano (16 chars)
+        if len(moment_str) == 17:  # Formato YYYYMMDDHHmm-HHmm (gregoriano)
+            base_date_str = moment_str[:8]
+            start_time_str = moment_str[8:12]
+            end_time_str = moment_str[13:]
+
+            try:
+                start_dt = datetime.datetime.strptime(f"{base_date_str}{start_time_str}", "%Y%m%d%H%M").replace(tzinfo=utc)
+                end_dt = datetime.datetime.strptime(f"{base_date_str}{end_time_str}", "%Y%m%d%H%M").replace(tzinfo=utc)
+            except ValueError as e:
+                raise ValueError(f"Formato de rango gregoriano inválido: {moment_str}. Error: {e}")
+                
+        elif len(moment_str) == 16:  # Formato YYYYjjjHHmm-HHmm (juliano)
+            year = moment_str[:4]
+            julian_day = moment_str[4:7]
+            start_time_str = moment_str[7:11]
+            end_time_str = moment_str[12:]
+            
+            try:
+                # Convertir día juliano a fecha gregoriana
+                base_dt = datetime.datetime.strptime(f"{year}{julian_day}", "%Y%j")
+                start_dt = base_dt.replace(hour=int(start_time_str[:2]), minute=int(start_time_str[2:]), tzinfo=utc)
+                end_dt = base_dt.replace(hour=int(end_time_str[:2]), minute=int(end_time_str[2:]), tzinfo=utc)
+            except ValueError as e:
+                raise ValueError(f"Formato de rango juliano inválido: {moment_str}. Error: {e}")
+        else:
+            raise ValueError(f"Longitud de rango no reconocida: '{moment_str}' (esperado 16 o 17 caracteres)")
+
+        if start_dt > end_dt:
+            raise ValueError("En el rango, la hora de inicio debe ser anterior a la hora de fin.")
+
+        moments = []
+        current_dt = start_dt
+        while current_dt <= end_dt:
+            # Formatear a Juliano YYYYjjjHHMM
+            year = current_dt.strftime("%Y")
+            month = current_dt.strftime("%m")
+            day = current_dt.strftime("%d")
+            julian_moment = f"{year}{current_dt.strftime('%j')}{current_dt.strftime('%H%M')}"
+            moments.append((julian_moment, year, month, day))
+            current_dt += datetime.timedelta(minutes=interval_minutes)
+        
+        print(f"Rango expandido a {len(moments)} momentos (intervalo de {interval_minutes} min).")
+        return moments
+
+    elif len(moment_str) == 11 or len(moment_str) == 12:
+        # Es un momento único, lo normalizamos y lo devolvemos en una lista con una tupla
+        return [normalize_moment(moment_str)]
+    else:
+        raise ValueError(f"Formato de momento o rango no reconocido: '{moment_str}'")
+
+
+def group_and_report_failures(failed_moments, interval_minutes=5):
+    """
+    Agrupa momentos fallidos consecutivos en rangos y los imprime.
+    """
+    if not failed_moments:
+        return
+
+    print("\n--- Resumen de Fallas ---")
+    print(f"Advertencia: No se encontraron datos completos para {len(failed_moments)} momentos.")
+
+    # Ordenar por si acaso, aunque deberían venir ordenados
+    failed_moments.sort()
+    
+    groups = []
+    if len(failed_moments) > 0:
+        start_of_group = failed_moments[0]
+        for i in range(1, len(failed_moments)):
+            # Convertir a datetime para comparar
+            prev_dt = datetime.datetime.strptime(failed_moments[i-1], "%Y%j%H%M")
+            curr_dt = datetime.datetime.strptime(failed_moments[i], "%Y%j%H%M")
+            
+            # Si el momento actual no es consecutivo al anterior, cerramos el grupo
+            if (curr_dt - prev_dt) > datetime.timedelta(minutes=interval_minutes):
+                groups.append((start_of_group, failed_moments[i-1]))
+                start_of_group = failed_moments[i]
+        # Añadir el último grupo
+        groups.append((start_of_group, failed_moments[-1]))
+
+    for start, end in groups:
+        print(f"  - Intervalo fallido: {start} a {end}" if start != end else f"  - Momento fallido: {start}")
+
+
+def get_filelist_from_path(data_path, moment_info, products, use_date_tree=False, verbose=True):
     """
     Busca archivos en un directorio que coincidan con un momento 'YYYYjjjhhmm" 
     y que contengan uno de los identificadores de 'products' en su nombre.
     
-    Si hay duplicados (CG_ y OR_), da preferencia a los que empiezan con CG_.
-    
     Args:
         data_path (Path): Ruta base donde buscar los archivos
-        moment (str): Momento en formato 'YYYYjjjHHMM' (juliano) o 'YYYYMMDDhhmm' (gregoriano)
+        moment_info (tuple): Tupla con (moment_julian, year, month, day).
         products (list): Lista de productos a buscar
         use_date_tree (bool): Si True, usa la estructura YYYY/MM/DD derivada de moment.
-                              Si False (por defecto), busca directamente en data_path.
+        verbose (bool): Si True, imprime información detallada del proceso de búsqueda.
     """
     
-    # Normalizar el momento al formato juliano y extraer componentes de fecha
-    moment_julian, year, month, day = normalize_moment(moment)
+    # Desempaquetar la información del momento
+    moment_julian, year, month, day = moment_info
     
-    # Si use_date_tree es True, construir la ruta con estructura de fecha
+    # Construir la ruta de búsqueda
     if use_date_tree:
         # Construir la ruta completa usando los componentes de fecha
         search_path = data_path / year / month / day
@@ -153,33 +259,47 @@ def get_filelist_from_path(data_path, moment, products, use_date_tree=False):
         search_path = data_path
     
     # Usar el momento en formato juliano para buscar archivos
+    # Patrón completo YYYYjjjHHMM para buscar archivos que coincidan con el momento
     patron_base = f"*s{moment_julian}*.nc"
 
-    print(f"Buscando archivos en: {search_path}")
-    print(f"Usando patrón base: {patron_base}")
-    print(f"Filtrando por productos: {products}")
+    if verbose:
+        print(f"Buscando archivos en: {search_path}")
+        print(f"Usando patrón base: {patron_base}")
 
     # Comprobar si el directorio existe antes de buscar
     if not search_path.is_dir():
-        print(f"Error: El directorio '{search_path}' no existe. Por favor, comprueba la ruta.")
+        if verbose:
+            print(f"Error: El directorio '{search_path}' no existe. Por favor, comprueba la ruta.")
         return []
     
     # Obtenemos *todos* los archivos que coinciden con el tiempo (patrón base)
-    archivos_por_tiempo = search_path.glob(patron_base)
+    archivos_por_tiempo = list(search_path.glob(patron_base))
+    
+    if verbose:
+        print(f"Encontrados {len(archivos_por_tiempo)} archivos que coinciden con el patrón de tiempo.")
     
     # Diccionario para agrupar archivos por producto: producto -> lista de paths
     archivos_por_producto = {prod: [] for prod in products}
     
     for p in archivos_por_tiempo:
+        p_name = p.name
         for prod in products:
-            # Si el producto es una banda (ej. "C07"), busca también "CMIP" en el nombre.
-            if prod.startswith("C"):
-                if prod in p.name and "CMIP" in p.name:
+            # Lógica de coincidencia para diferentes tipos de productos:
+            # - Bandas espectrales (C04, C07, etc.): buscar "M6C07_" o "CMIPC-M6C07_"
+            # - ACTP: buscar "ACTPC-" (Cloud Top Phase)
+            if prod.startswith('C'):
+                # Para bandas: buscar el patrón M6Cxx_ en el nombre
+                if f"M6{prod}_" in p_name or f"-{prod}_" in p_name:
                     archivos_por_producto[prod].append(p)
                     break
-            # Para otros productos (ej. "ACTP"), solo busca el producto.
+            elif prod == 'ACTP':
+                # Para ACTP: el archivo se llama ACTPC (con C al final)
+                if "ACTPC-" in p_name or "-ACTP_" in p_name or "-ACTPC-" in p_name:
+                    archivos_por_producto[prod].append(p)
+                    break
             else:
-                if prod in p.name:
+                # Para otros productos: búsqueda estándar
+                if f"-{prod}_" in p_name or f"-{prod}-" in p_name:
                     archivos_por_producto[prod].append(p)
                     break
     
@@ -198,17 +318,17 @@ def get_filelist_from_path(data_path, moment, products, use_date_tree=False):
             if cg_files:
                 lista_archivos.append(str(cg_files[0]))
                 if len(cg_files) > 1 or len(candidatos) > len(cg_files):
-                    print(f"  Nota: Se encontraron {len(candidatos)} archivos para {prod}, usando {cg_files[0].name} (preferencia CG_)")
+                    if verbose: print(f"  Nota: Se encontraron {len(candidatos)} archivos para {prod}, usando {cg_files[0].name} (preferencia CG_)")
             else:
                 # No hay CG_, usar el primero que encontremos
                 lista_archivos.append(str(candidatos[0]))
                 if len(candidatos) > 1:
-                    print(f"  Nota: Se encontraron {len(candidatos)} archivos para {prod}, usando {candidatos[0].name}")
+                    if verbose: print(f"  Nota: Se encontraron {len(candidatos)} archivos para {prod}, usando {candidatos[0].name}")
     
     return lista_archivos
     
 
-def get_sun_zenith_angle(lat_array, lon_array, image_time_dt):
+def get_sun_zenith_angle(lat_array, lon_array, image_time_dt, eph, ts):
     """
     Calcula el ángulo cenital solar para cada punto de un arreglo lat/lon.
     
@@ -216,10 +336,6 @@ def get_sun_zenith_angle(lat_array, lon_array, image_time_dt):
     del Sol (RA/Dec) una sola vez y luego usamos geometría esférica para
     calcular el ángulo cenital en cada píxel.
     """
-    # --- 1. Cargar las efemérides y la escala de tiempo ---
-    eph = load('de421.bsp')
-    ts = load.timescale()
-    
     # Definir los objetos Sol y Tierra desde las efemérides
     sun = eph['sun']
     earth = eph['earth']
@@ -523,9 +639,9 @@ def create_color_png(data_array, output_path, color_table_path=None, bounds=None
     print(f"Imagen PNG guardada en: {output_path}")
 
 
-def main(data_path, moment, output_path, clip_region=None, create_png=False, use_date_tree=False):
+def main(data_path, moment_info, output_path, clip_region=None, create_png=False, use_date_tree=False, eph=None, ts=None):
     """Función principal para ejecutar el proceso de detección de cenizas."""
-    print(f"Iniciando detección para el momento: {moment}")
+    print(f"Iniciando detección para el momento: {moment_info[0]}")
     
     # Validar y obtener los límites de la región de recorte si se especificó
     reproject_to_geo = False
@@ -553,12 +669,12 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False, use
     # NOTA: El archivo NAV ya no es necesario, se calculan lat/lon desde la proyección
     productos = ["ACTP", "C04", "C07", "C11", "C13", "C14", "C15"]
     
-    archivos = get_filelist_from_path(data_path, moment, productos, use_date_tree=use_date_tree)
+    archivos = get_filelist_from_path(data_path, moment_info, productos, use_date_tree=use_date_tree)
     if not archivos:
-        print(f"Error: No se encontró ningún archivo con este momento {moment}.")
+        print(f"Error: No se encontró ningún archivo con este momento {moment_info[0]}.")
         return
     if len(archivos) != len(productos):
-        print(f"Error: Se encontraron {len(archivos)} archivos, pero se esperaban {len(productos)}.")
+        print(f"Error: Se encontraron {len(archivos)} archivos, pero se esperaban {len(productos)}. (Momento: {moment_info[0]})")
         return
     
     print(f"Se encontraron los {len(archivos)} archivos requeridos.")
@@ -709,13 +825,27 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False, use
     
     # Leemos las demás variables, aplicando el recorte si es necesario
     print("\nCargando datos de las bandas y productos...")
-    c04 = xr.open_dataset(file_paths["C04"])['CMI'].data[y_slice, x_slice]
+    
+    # Cargar datos y cerrar datasets inmediatamente para liberar recursos
+    with xr.open_dataset(file_paths["C04"]) as ds:
+        c04 = ds['CMI'].data[y_slice, x_slice]
+    
     c07 = ds_c07['CMI'].data[y_slice, x_slice]
-    c11 = xr.open_dataset(file_paths["C11"])['CMI'].data[y_slice, x_slice]
-    c13 = xr.open_dataset(file_paths["C13"])['CMI'].data[y_slice, x_slice]
-    c14 = xr.open_dataset(file_paths["C14"])['CMI'].data[y_slice, x_slice]
-    c15 = xr.open_dataset(file_paths["C15"])['CMI'].data[y_slice, x_slice]
-    phase = xr.open_dataset(file_paths["ACTP"])['Phase'].data[y_slice, x_slice]
+    
+    with xr.open_dataset(file_paths["C11"]) as ds:
+        c11 = ds['CMI'].data[y_slice, x_slice]
+    
+    with xr.open_dataset(file_paths["C13"]) as ds:
+        c13 = ds['CMI'].data[y_slice, x_slice]
+    
+    with xr.open_dataset(file_paths["C14"]) as ds:
+        c14 = ds['CMI'].data[y_slice, x_slice]
+    
+    with xr.open_dataset(file_paths["C15"]) as ds:
+        c15 = ds['CMI'].data[y_slice, x_slice]
+    
+    with xr.open_dataset(file_paths["ACTP"]) as ds:
+        phase = ds['Phase'].data[y_slice, x_slice]
     
     print(f"Forma de los arrays cargados: {c07.shape}")
     
@@ -746,6 +876,10 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False, use
     # Obtenemos fecha y hora de los datos desde el atributo time_coverage_start
     # que está en formato ISO 8601
     time_coverage_start = ds_c07.attrs['time_coverage_start']
+    
+    # Cerrar el dataset C07 ya que no lo necesitamos más
+    ds_c07.close()
+    
     # Parsear el string ISO 8601 a datetime
     from dateutil.parser import parse
     image_time_dt = parse(time_coverage_start).replace(tzinfo=utc)
@@ -756,7 +890,7 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False, use
     delta3 = c07 - c13
 
     print("Fecha y hora ", image_time_dt.strftime("%Y-%m-%d %H:%M:%S UTC"))
-    sza = get_sun_zenith_angle(lat, lon, image_time_dt)
+    sza = get_sun_zenith_angle(lat, lon, image_time_dt, eph, ts)
 
     # --- Clasificación de ceniza ---
     # Máscaras de iluminación
@@ -1020,45 +1154,112 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False, use
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Detecta ceniza volcánica a partir de datos GOES L2.")
-    parser.add_argument('--path', type=Path, default=l2_path, help=f"Ruta al directorio de datos L2. Por defecto: {l2_path}")
-    parser.add_argument('--moment', type=str, default=None, help="Momento a procesar en formato 'YYYYjjjHHMM'. Por defecto, se calcula el más reciente.")
+    parser.add_argument('--path', type=Path, default=l2_path, 
+                        help=f"Ruta al directorio de datos L2. Por defecto: {l2_path}")
+    parser.add_argument('--moment', type=str, default=None, 
+                        help="Momento o rango a procesar. Formatos: 'YYYYjjjHHMM', 'YYYYMMDDHHMM', o 'YYYYMMDDHHmm-HHmm'. "
+                             "Por defecto, se calcula el más reciente.")
     parser.add_argument('--output', type=Path, default=None, 
                         help="Ruta de salida para el GeoTIFF. Puede ser un archivo (ej: 'resultado.tif') o un directorio (ej: '/data/salida/'). "
                              "Si es un directorio, se genera automáticamente el nombre 'ceniza_[momento].tif' (o con sufijo '_geo' si se reproyecta). "
                              "Por defecto: './ceniza_[momento].tif'")
     parser.add_argument('--clip', type=str, choices=list(CLIP_REGIONS_WITH_GEO.keys()), default=None, 
                         help=f"Región para recortar el resultado final. Agrega 'geo' al final para reproyectar a lat/lon. Opciones: {', '.join(CLIP_REGIONS.keys())} (o con sufijo 'geo')")
-    parser.add_argument('--png', action='store_true', help="Genera también una imagen PNG a color con la misma resolución que el GeoTIFF")
+    parser.add_argument('--png', action='store_true', 
+                        help="Genera también una imagen PNG a color con la misma resolución que el GeoTIFF")
     parser.add_argument('--date-tree', action='store_true', 
                         help="Usa estructura de directorios YYYY/MM/DD dentro de --path para localizar los archivos según el momento especificado")
+    parser.add_argument('--dry-run', action='store_true',
+                        help="Realiza una verificación de archivos para el momento o rango especificado sin procesar los datos. "
+                             "Informa qué momentos tienen datos completos y cuáles no.")
     
     args = parser.parse_args()
 
+    # --- 1. Determinar la lista de momentos a procesar ---
     if args.moment:
-        moment_a_procesar = args.moment
+        try:
+            moment_list = parse_moment_string(args.moment)
+        except ValueError as e:
+            print(f"Error: {e}")
+            exit(1)
     else:
-        # Esta función obtiene el momento más reciente en formato 'YYYYjjjhhmm'
-        moment_a_procesar = get_moment()
+        # Obtiene el momento más reciente en formato 'YYYYjjjHHMM'
+        moment_list = [get_moment()]
 
-    if args.output:
-        output_file = Path(args.output)
-        # Si el usuario proporcionó un directorio, usar nombre por defecto en esa ruta
-        if output_file.is_dir():
-            # Determinar el nombre de archivo por defecto
+    # --- 2. Verificación de archivos (Pre-flight check) ---
+    print("\n--- Verificando disponibilidad de archivos ---")
+    productos_requeridos = ["ACTP", "C04", "C07", "C11", "C13", "C14", "C15"]
+    momentos_validos = []
+    momentos_fallidos = []
+
+    for moment_info in moment_list:
+        files = get_filelist_from_path(args.path, moment_info, productos_requeridos, use_date_tree=args.date_tree, verbose=False)
+        if len(files) == len(productos_requeridos):
+            momentos_validos.append(moment_info)
+        else:
+            momentos_fallidos.append(moment_info[0]) # Solo guardamos el string del momento para el reporte
+
+    # --- 3. Reportar resultados de la verificación ---
+    group_and_report_failures(momentos_fallidos)
+
+    if momentos_validos:
+        print(f"\nSe encontraron datos completos para {len(momentos_validos)} momentos.")
+    
+    if not momentos_validos:
+        print("\nNo se encontraron datos completos para ningún momento en el rango especificado. Terminando.")
+        exit(0)
+
+    if args.dry_run:
+        print("\nModo 'dry-run' activado. No se realizará ningún procesamiento. Terminando.")
+        exit(0)
+
+    # --- 4. Procesar momentos válidos ---
+    print(f"\n--- Iniciando procesamiento para {len(momentos_validos)} momentos válidos ---")
+    
+    # Cargar recursos pesados una sola vez
+    print("Cargando efemérides de Skyfield (una sola vez)...")
+    eph_global = load('de421.bsp')
+    ts_global = load.timescale()
+    
+    for i, moment_info in enumerate(momentos_validos):
+        moment_a_procesar = moment_info[0]
+        print(f"\n[{i+1}/{len(momentos_validos)}] Procesando momento: {moment_a_procesar}")
+        
+        # Generar nombre de archivo de salida para cada momento
+        if args.output and Path(args.output).is_dir():
+            output_dir = Path(args.output)
             if args.clip and args.clip.endswith('geo'):
-                filename = f"ceniza_{moment_a_procesar}_geo.tif"
+                filename = f"ceniza_{moment_a_procesar}_geo.tif" 
             else:
                 filename = f"ceniza_{moment_a_procesar}.tif"
-            output_file = output_file / filename
-    else:
-        # Genera un nombre de archivo de salida por defecto
-        # Si se usa reproyección (sufijo 'geo'), agregar '_geo' al nombre
-        if args.clip and args.clip.endswith('geo'):
-            output_file = Path(f"./ceniza_{moment_a_procesar}_geo.tif")
+            output_file = output_dir / filename
+        elif args.output: # Si es un archivo, solo se procesa el primer momento válido
+            if i > 0:
+                print("Advertencia: Se especificó un único archivo de salida para un rango. Solo se procesará el primer momento válido.")
+                break
+            output_file = Path(args.output)
         else:
-            output_file = Path(f"./ceniza_{moment_a_procesar}.tif")
+            if args.clip and args.clip.endswith('geo'):
+                output_file = Path(f"./ceniza_{moment_a_procesar}_geo.tif")
+            else:
+                output_file = Path(f"./ceniza_{moment_a_procesar}.tif")
 
-    # Descomentar para pruebas con datos específicos
-    # moment_a_procesar = "20191001731"
+        try:
+            main(
+                data_path=args.path, 
+                moment_info=moment_info, 
+                output_path=output_file, 
+                clip_region=args.clip, 
+                create_png=args.png, 
+                use_date_tree=args.date_tree,
+                eph=eph_global,
+                ts=ts_global
+            )
+        except Exception as e:
+            print(f"\n*** Error procesando momento {moment_a_procesar}: {e}")
+            print("Continuando con el siguiente momento...")
+            import traceback
+            traceback.print_exc()
+            continue
 
-    main(args.path, moment_a_procesar, output_file, clip_region=args.clip, create_png=args.png, use_date_tree=args.date_tree)
+    print("\n--- Procesamiento completado. ---")
