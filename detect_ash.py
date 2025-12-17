@@ -1226,18 +1226,35 @@ if __name__ == "__main__":
         print(f"\n[{i+1}/{len(momentos_validos)}] Procesando momento: {moment_a_procesar}")
         
         # Generar nombre de archivo de salida para cada momento
-        if args.output and Path(args.output).is_dir():
-            output_dir = Path(args.output)
-            if args.clip and args.clip.endswith('geo'):
-                filename = f"ceniza_{moment_a_procesar}_geo.tif" 
+        if args.output:
+            outp = str(args.output)
+            # Si el usuario indicó explícitamente un directorio con '/' al final,
+            # lo interpretamos como directorio incluso si no existe y lo creamos.
+            if outp.endswith(os.path.sep):
+                output_dir = Path(outp)
+                try:
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                except Exception as e:
+                    print(f"Error creando el directorio de salida '{output_dir}': {e}")
+                    raise
+                if args.clip and args.clip.endswith('geo'):
+                    filename = f"ceniza_{moment_a_procesar}_geo.tif"
+                else:
+                    filename = f"ceniza_{moment_a_procesar}.tif"
+                output_file = output_dir / filename
+            elif Path(outp).is_dir():
+                output_dir = Path(outp)
+                if args.clip and args.clip.endswith('geo'):
+                    filename = f"ceniza_{moment_a_procesar}_geo.tif" 
+                else:
+                    filename = f"ceniza_{moment_a_procesar}.tif"
+                output_file = output_dir / filename
             else:
-                filename = f"ceniza_{moment_a_procesar}.tif"
-            output_file = output_dir / filename
-        elif args.output: # Si es un archivo, solo se procesa el primer momento válido
-            if i > 0:
-                print("Advertencia: Se especificó un único archivo de salida para un rango. Solo se procesará el primer momento válido.")
-                break
-            output_file = Path(args.output)
+                # Se trata como archivo de salida; si hay varios momentos, solo se usa el primero
+                if i > 0:
+                    print("Advertencia: Se especificó un único archivo de salida para un rango. Solo se procesará el primer momento válido.")
+                    break
+                output_file = Path(outp)
         else:
             if args.clip and args.clip.endswith('geo'):
                 output_file = Path(f"./ceniza_{moment_a_procesar}_geo.tif")
