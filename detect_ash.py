@@ -3,6 +3,7 @@
 
 import argparse
 import datetime
+import logging
 import xarray as xr
 import numpy as np
 from scipy import ndimage
@@ -14,6 +15,9 @@ import multiprocessing
 import os
 from PIL import Image
 from mapdrawer import MapDrawer
+
+# Configurar logger
+logger = logging.getLogger(__name__)
 
 
 # Ruta al directorio de datos L2
@@ -110,7 +114,7 @@ def normalize_moment(moment):
         # Construir momento en formato juliano
         moment_julian = f"{year}{julian_day}{hhmm}"
         
-        print(f"Momento {moment} (gregoriano) normalizado a {moment_julian} (juliano).")
+        logger.debug(f"Momento {moment} (gregoriano) normalizado a {moment_julian} (juliano).")
         return moment_julian, year, month, day
         
     elif len(moment) == 11:
@@ -123,7 +127,7 @@ def normalize_moment(moment):
         month = f"{date_obj.month:02d}"
         day = f"{date_obj.day:02d}"
         
-        print(f"Momento {moment} (juliano) confirmado.")
+        logger.debug(f"Momento {moment} (juliano) confirmado.")
         return moment, year, month, day
     else:
         raise ValueError(f"Formato de momento inválido: '{moment}'. Debe tener 11 dígitos (YYYYjjjHHMM) o 12 dígitos (YYYYMMDDhhmm)")
@@ -149,7 +153,7 @@ def parse_moment_string(moment_str, interval_minutes=5):
                      Esto evita recalcular la información de fecha repetidamente.
     """
     if '-' in moment_str:
-        print(f"Detectado rango de momentos: {moment_str}")
+        logger.info(f"Detectado rango de momentos: {moment_str}")
         
         # Determinar si es formato gregoriano (17 chars) o juliano (16 chars)
         if len(moment_str) == 17:  # Formato YYYYMMDDHHmm-HHmm (gregoriano)
@@ -193,7 +197,7 @@ def parse_moment_string(moment_str, interval_minutes=5):
             moments.append((julian_moment, year, month, day))
             current_dt += datetime.timedelta(minutes=interval_minutes)
         
-        print(f"Rango expandido a {len(moments)} momentos (intervalo de {interval_minutes} min).")
+        logger.info(f"Rango expandido a {len(moments)} momentos (intervalo de {interval_minutes} min).")
         return moments
 
     elif len(moment_str) == 11 or len(moment_str) == 12:
@@ -263,8 +267,8 @@ def get_filelist_from_path(data_path, moment_info, products, use_date_tree=False
     patron_base = f"*s{moment_julian}*.nc"
 
     if verbose:
-        print(f"Buscando archivos en: {search_path}")
-        print(f"Usando patrón base: {patron_base}")
+        logger.debug(f"Buscando archivos en: {search_path}")
+        logger.debug(f"Usando patrón base: {patron_base}")
 
     # Comprobar si el directorio existe antes de buscar
     if not search_path.is_dir():
@@ -276,7 +280,7 @@ def get_filelist_from_path(data_path, moment_info, products, use_date_tree=False
     archivos_por_tiempo = list(search_path.glob(patron_base))
     
     if verbose:
-        print(f"Encontrados {len(archivos_por_tiempo)} archivos que coinciden con el patrón de tiempo.")
+        logger.debug(f"Encontrados {len(archivos_por_tiempo)} archivos que coinciden con el patrón de tiempo.")
     
     # Diccionario para agrupar archivos por producto: producto -> lista de paths
     archivos_por_producto = {prod: [] for prod in products}
@@ -387,10 +391,10 @@ def get_sun_zenith_angle(lat_array, lon_array, image_time_dt, eph, ts):
     sza_array = np.rad2deg(np.arccos(cos_sza))
     
     # ¡Listo! sza_array tiene la misma forma que lat_array y lon_array
-    print("\n--- Resultados ---")
-    print(f"Forma del array SZA: {sza_array.shape}")
-    print(f"SZA (min): {np.nanmin(sza_array):.2f}°")
-    print(f"SZA (max): {np.nanmax(sza_array):.2f}°")
+    logger.debug("\n--- Resultados ---")
+    logger.debug(f"Forma del array SZA: {sza_array.shape}")
+    logger.debug(f"SZA (min): {np.nanmin(sza_array):.2f}°")
+    logger.debug(f"SZA (max): {np.nanmax(sza_array):.2f}°")
     
     return sza_array
 
@@ -496,11 +500,11 @@ def genera_media_dst(arreglo, kernel_size=5, n_jobs=None):
             result_slice = result[offset:offset + (end_row - start_row), :]
             kernel_std[start_row:end_row, :] = result_slice
     
-    print(f"\n--- Resultados del Kernel ({kernel_size}x{kernel_size}) ---")
-    print(f"Forma del array de Media: {kernel_media.shape}")
-    print(f"Forma del array de Desv. Estándar: {kernel_std.shape}")
+    logger.debug(f"\n--- Resultados del Kernel ({kernel_size}x{kernel_size}) ---")
+    logger.debug(f"Forma del array de Media: {kernel_media.shape}")
+    logger.debug(f"Forma del array de Desv. Estándar: {kernel_std.shape}")
     if n_jobs > 1:
-        print(f"Procesamiento paralelo con {n_jobs} procesos")
+        logger.debug(f"Procesamiento paralelo con {n_jobs} procesos")
 
     return kernel_media, kernel_std
 
@@ -551,7 +555,7 @@ def create_color_png(data_array, output_path, color_table_path=None, bounds=None
                             colors[value] = (r, g, b)
             if colors:
                 default_colors.update(colors)
-                print(f"Paleta de colores cargada desde: {color_table_path}")
+                logger.debug(f"Paleta de colores cargada desde: {color_table_path}")
         except Exception as e:
             print(f"Advertencia: No se pudo leer {color_table_path}, usando paleta por defecto. Error: {e}")
     
@@ -602,10 +606,10 @@ def create_color_png(data_array, output_path, color_table_path=None, bounds=None
             lat_span = abs(lat_max - lat_min)
             if lon_span < 20 and lat_span < 20:
                 layer_selection = ("MEXSTATES",)
-                print("Dominio local detectado; dibujando solo capa MEXSTATES.")
+                logger.debug("Dominio local detectado; dibujando solo capa MEXSTATES.")
             else:
                 layer_selection = ("COASTLINE", "COUNTRIES", "MEXSTATES")
-                print("Dominio amplio; dibujando capas COASTLINE, COUNTRIES y MEXSTATES.")
+                logger.debug("Dominio amplio; dibujando capas COASTLINE, COUNTRIES y MEXSTATES.")
             for layer_key in layer_selection:
                 try:
                     mapper.draw_layer(layer_key, color='white', width=0.5)
@@ -647,12 +651,12 @@ def create_color_png(data_array, output_path, color_table_path=None, bounds=None
     
     # Guardar imagen
     img.save(output_path)
-    print(f"Imagen PNG guardada en: {output_path}")
+    logger.info(f"Imagen PNG guardada en: {output_path}")
 
 
 def main(data_path, moment_info, output_path, clip_region=None, create_png=False, use_date_tree=False, eph=None, ts=None):
     """Función principal para ejecutar el proceso de detección de cenizas."""
-    print(f"Iniciando detección para el momento: {moment_info[0]}")
+    logger.debug(f"Iniciando detección para el momento: {moment_info[0]}")
     
     # Validar y obtener los límites de la región de recorte si se especificó
     reproject_to_geo = False
@@ -670,9 +674,9 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
         
         bbox = CLIP_REGIONS[base_region]
         if reproject_to_geo:
-            print(f"Se aplicará recorte a región '{base_region}' y reproyección a lat/lon: {bbox}")
+            logger.debug(f"Se aplicará recorte a región '{base_region}' y reproyección a lat/lon: {bbox}")
         else:
-            print(f"Se aplicará recorte a región '{base_region}': {bbox}")
+            logger.debug(f"Se aplicará recorte a región '{base_region}': {bbox}")
     else:
         bbox = None
 
@@ -688,7 +692,7 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
         print(f"Error: Se encontraron {len(archivos)} archivos, pero se esperaban {len(productos)}. (Momento: {moment_info[0]})")
         return
     
-    print(f"Se encontraron los {len(archivos)} archivos requeridos.")
+    logger.debug(f"Se encontraron los {len(archivos)} archivos requeridos.")
     
     # Creamos un diccionario para almacenar las rutas de los archivos por producto.
     file_paths = {}
@@ -700,14 +704,14 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
             is_other_product = not prod.startswith("C") and prod in str(archivo_path) 
 
             if is_band_product or is_other_product:
-                print(f"Asociando {prod} con: {archivo_path}")
+                logger.debug(f"Asociando {prod} con: {archivo_path}")
                 file_paths[prod] = archivo_path
                 break # Pasamos al siguiente archivo una vez que encontramos su producto
     
-    print("\n¡Éxito! Todos los productos requeridos fueron encontrados.")
+    logger.debug("\n¡Éxito! Todos los productos requeridos fueron encontrados.")
 
     # Usamos xarray para abrir los archivos NetCDF
-    print("\nLeyendo datos con xarray...")
+    logger.debug("\nLeyendo datos con xarray...")
     ds_c07 = xr.open_dataset(file_paths["C07"])
     
     # Obtener parámetros de proyección GOES desde el NetCDF
@@ -732,7 +736,7 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
     
     # --- Determinar índices de recorte si se especificó una región ---
     if bbox:
-        print(f"\nCalculando índices de recorte para región: {bbox}")
+        logger.debug(f"\nCalculando índices de recorte para región: {bbox}")
         # bbox = [lon_min, lat_max, lon_max, lat_min]
         lon_min, lat_max, lon_max, lat_min = bbox
         
@@ -751,7 +755,7 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
             lat_min_exp = lat_min - lat_margin
             lat_max_exp = lat_max + lat_margin
             
-            print(f"Bbox expandido para reproyección: lon[{lon_min_exp:.4f}, {lon_max_exp:.4f}], lat[{lat_min_exp:.4f}, {lat_max_exp:.4f}]")
+            logger.debug(f"Bbox expandido para reproyección: lon[{lon_min_exp:.4f}, {lon_max_exp:.4f}], lat[{lat_min_exp:.4f}, {lat_max_exp:.4f}]")
             
             # Usar el bbox expandido para el recorte en GOES
             x_min, y_min = transformer_to_goes.transform(lon_min_exp, lat_min_exp)
@@ -783,8 +787,8 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
         x_coords = x_coords_full[x_slice]
         y_coords = y_coords_full[y_slice]
         
-        print(f"Índices de recorte: y[{y_idx_min}:{y_idx_max+1}], x[{x_idx_min}:{x_idx_max+1}]")
-        print(f"Tamaño recortado: {len(y_coords)} x {len(x_coords)} píxeles")
+        logger.debug(f"Índices de recorte: y[{y_idx_min}:{y_idx_max+1}], x[{x_idx_min}:{x_idx_max+1}]")
+        logger.debug(f"Tamaño recortado: {len(y_coords)} x {len(x_coords)} píxeles")
     else:
         # Sin recorte, usar todo el dominio
         x_coords = x_coords_full
@@ -821,7 +825,7 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
         y_res_meters = -0.000056 * goes_height
 
     # Debug para verificar que no sean valores astronómicos (debe ser ~2000.0)
-    print(f"Resolución calculada (m): X={x_res_meters:.2f}, Y={y_res_meters:.2f}")
+    logger.debug(f"Resolución calculada (m): X={x_res_meters:.2f}, Y={y_res_meters:.2f}")
 
     # Normalizar signos y asignar
     x_res = abs(x_res_meters)
@@ -835,7 +839,7 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
     geotransform = Affine(x_res, 0.0, x_ul, 0.0, y_res, y_ul)
     
     # Leemos las demás variables, aplicando el recorte si es necesario
-    print("\nCargando datos de las bandas y productos...")
+    logger.debug("\nCargando datos de las bandas y productos...")
     
     # Cargar datos y cerrar datasets inmediatamente para liberar recursos
     with xr.open_dataset(file_paths["C04"]) as ds:
@@ -858,7 +862,7 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
     with xr.open_dataset(file_paths["ACTP"]) as ds:
         phase = ds['Phase'].data[y_slice, x_slice]
     
-    print(f"Forma de los arrays cargados: {c07.shape}")
+    logger.debug(f"Forma de los arrays cargados: {c07.shape}")
     
     # Crear máscara de datos válidos (píxeles que tienen datos en todas las bandas)
     # Si alguna banda tiene NaN, el píxel se marcará como sin datos
@@ -879,10 +883,10 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
     # Actualizar máscara: también marcar como inválidos los píxeles fuera del disco visible
     valid_data_mask = valid_data_mask & np.isfinite(lon) & np.isfinite(lat)
     
-    print(f"\n--- Coordenadas calculadas ---")
-    print(f"Forma de lat/lon: {lat.shape}")
-    print(f"Rango de latitud: [{np.nanmin(lat):.2f}, {np.nanmax(lat):.2f}]")
-    print(f"Rango de longitud: [{np.nanmin(lon):.2f}, {np.nanmax(lon):.2f}]")
+    logger.debug(f"\n--- Coordenadas calculadas ---")
+    logger.debug(f"Forma de lat/lon: {lat.shape}")
+    logger.debug(f"Rango de latitud: [{np.nanmin(lat):.2f}, {np.nanmax(lat):.2f}]")
+    logger.debug(f"Rango de longitud: [{np.nanmin(lon):.2f}, {np.nanmax(lon):.2f}]")
 
     # Obtenemos fecha y hora de los datos desde el atributo time_coverage_start
     # que está en formato ISO 8601
@@ -900,7 +904,7 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
     delta2 = c11 - c13
     delta3 = c07 - c13
 
-    print("Fecha y hora ", image_time_dt.strftime("%Y-%m-%d %H:%M:%S UTC"))
+    logger.debug("Fecha y hora ", image_time_dt.strftime("%Y-%m-%d %H:%M:%S UTC"))
     sza = get_sun_zenith_angle(lat, lon, image_time_dt, eph, ts)
 
     # --- Clasificación de ceniza ---
@@ -979,9 +983,9 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
     ceniza[~valid_data_mask] = 255
 
     print("\n--- Clasificación Final de Ceniza ---")
-    print(f"Forma del array final: {ceniza.shape}")
-    print(f"Valores únicos en la clasificación: {np.unique(ceniza)}")
-    print(f"Píxeles sin datos (nodata=255): {np.sum(~valid_data_mask)} de {ceniza.size} ({100*np.sum(~valid_data_mask)/ceniza.size:.2f}%)")
+    logger.debug(f"Forma del array final: {ceniza.shape}")
+    logger.debug(f"Valores únicos en la clasificación: {np.unique(ceniza)}")
+    logger.debug(f"Píxeles sin datos (nodata=255): {np.sum(~valid_data_mask)} de {ceniza.size} ({100*np.sum(~valid_data_mask)/ceniza.size:.2f}%)")
 
     # --- Guardado en GeoTIFF ---
     # Creamos un DataArray de xarray con el resultado, usando la plantilla geoespacial
@@ -1001,13 +1005,13 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
 
     # Reproyectar a coordenadas geográficas si se especificó
     if bbox and reproject_to_geo:
-        print("\nReproyectando a coordenadas geográficas (EPSG:4326)...")
+        logger.debug("\nReproyectando a coordenadas geográficas (EPSG:4326)...")
         
         # Definir los límites EXACTOS en coordenadas geográficas (bbox original, sin expansión)
         # bbox = [lon_min, lat_max, lon_max, lat_min]
         lon_min, lat_max, lon_max, lat_min = bbox
         
-        print(f"Límites geográficos objetivo: lon[{lon_min}, {lon_max}], lat[{lat_min}, {lat_max}]")
+        logger.debug(f"Límites geográficos objetivo: lon[{lon_min}, {lon_max}], lat[{lat_min}, {lat_max}]")
         
         # Calcular resolución y dimensiones objetivo
         from rasterio.warp import Resampling
@@ -1034,8 +1038,8 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
             0.0, -exact_lat_res, lat_max
         )
         
-        print(f"Resolución objetivo: lon={exact_lon_res:.6f}°, lat={exact_lat_res:.6f}°")
-        print(f"Dimensiones objetivo: {dst_height} x {dst_width} píxeles")
+        logger.debug(f"Resolución objetivo: lon={exact_lon_res:.6f}°, lat={exact_lat_res:.6f}°")
+        logger.debug(f"Dimensiones objetivo: {dst_height} x {dst_width} píxeles")
         
         # Reproyectar directamente con transformación y dimensiones exactas
         output_da = output_da.rio.reproject(
@@ -1046,11 +1050,11 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
             nodata=255
         )
         
-        print(f"Forma después de reproyección: {output_da.shape}")
-        print(f"Límites después de reproyección: {output_da.rio.bounds()}")
-        print(f"CRS final: EPSG:4326 (lat/lon)")
+        logger.debug(f"Forma después de reproyección: {output_da.shape}")
+        logger.debug(f"Límites después de reproyección: {output_da.rio.bounds()}")
+        logger.debug(f"CRS final: EPSG:4326 (lat/lon)")
 
-    print(f"\nGuardando resultado en: {output_path}")
+    logger.debug(f"\nGuardando resultado en: {output_path}")
     
     # Definir tabla de colores (hardcoded desde ash.cpt)
     color_table = {
@@ -1183,8 +1187,15 @@ if __name__ == "__main__":
     parser.add_argument('--dry-run', action='store_true',
                         help="Realiza una verificación de archivos para el momento o rango especificado sin procesar los datos. "
                              "Informa qué momentos tienen datos completos y cuáles no.")
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help="Modo verbose: muestra información detallada del procesamiento. "
+                             "Por defecto, solo se muestran mensajes esenciales de progreso.")
     
     args = parser.parse_args()
+    
+    # Configurar nivel de logging según --verbose
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(level=log_level, format='%(message)s', force=True)
 
     # --- 1. Determinar la lista de momentos a procesar ---
     if args.moment:
@@ -1214,27 +1225,27 @@ if __name__ == "__main__":
     group_and_report_failures(momentos_fallidos)
 
     if momentos_validos:
-        print(f"\nSe encontraron datos completos para {len(momentos_validos)} momentos.")
+        logger.info(f"\nSe encontraron datos completos para {len(momentos_validos)} momentos.")
     
     if not momentos_validos:
-        print("\nNo se encontraron datos completos para ningún momento en el rango especificado. Terminando.")
+        logger.info("\nNo se encontraron datos completos para ningún momento en el rango especificado. Terminando.")
         exit(0)
 
     if args.dry_run:
-        print("\nModo 'dry-run' activado. No se realizará ningún procesamiento. Terminando.")
+        logger.info("\nModo 'dry-run' activado. No se realizará ningún procesamiento. Terminando.")
         exit(0)
 
     # --- 4. Procesar momentos válidos ---
-    print(f"\n--- Iniciando procesamiento para {len(momentos_validos)} momentos válidos ---")
+    logger.info(f"\n--- Iniciando procesamiento para {len(momentos_validos)} momentos válidos ---")
     
     # Cargar recursos pesados una sola vez
-    print("Cargando efemérides de Skyfield (una sola vez)...")
+    logger.debug("Cargando efemérides de Skyfield (una sola vez)...")
     eph_global = load('de421.bsp')
     ts_global = load.timescale()
     
     for i, moment_info in enumerate(momentos_validos):
         moment_a_procesar = moment_info[0]
-        print(f"\n[{i+1}/{len(momentos_validos)}] Procesando momento: {moment_a_procesar}")
+        logger.info(f"\n[{i+1}/{len(momentos_validos)}] Procesando momento: {moment_a_procesar}")
         
         # Generar nombre de archivo de salida para cada momento
         if args.output:
@@ -1292,10 +1303,10 @@ if __name__ == "__main__":
                 ts=ts_global
             )
         except Exception as e:
-            print(f"\n*** Error procesando momento {moment_a_procesar}: {e}")
-            print("Continuando con el siguiente momento...")
+            logger.error(f"\n*** Error procesando momento {moment_a_procesar}: {e}")
+            logger.debug("Continuando con el siguiente momento...")
             import traceback
             traceback.print_exc()
             continue
 
-    print("\n--- Procesamiento completado. ---")
+    logger.info("\n--- Procesamiento completado. ---")
