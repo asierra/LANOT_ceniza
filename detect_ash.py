@@ -1243,6 +1243,10 @@ if __name__ == "__main__":
     eph_global = load('de421.bsp')
     ts_global = load.timescale()
     
+    # Contadores para estadísticas
+    momentos_exitosos = 0
+    momentos_fallidos = 0
+    
     for i, moment_info in enumerate(momentos_validos):
         moment_a_procesar = moment_info[0]
         logger.info(f"\n[{i+1}/{len(momentos_validos)}] Procesando momento: {moment_a_procesar}")
@@ -1302,11 +1306,17 @@ if __name__ == "__main__":
                 eph=eph_global,
                 ts=ts_global
             )
+            momentos_exitosos += 1
         except Exception as e:
+            momentos_fallidos += 1
             logger.error(f"\n*** Error procesando momento {moment_a_procesar}: {e}")
             logger.debug("Continuando con el siguiente momento...")
             import traceback
             traceback.print_exc()
             continue
 
+    # Mostrar estadísticas finales
     logger.info("\n--- Procesamiento completado. ---")
+    logger.info(f"Momentos procesados exitosamente: {momentos_exitosos} de {len(momentos_validos)}")
+    if momentos_fallidos > 0:
+        logger.info(f"Momentos fallidos: {momentos_fallidos}")
