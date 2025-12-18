@@ -281,6 +281,8 @@ def get_filelist_from_path(data_path, moment_info, products, use_date_tree=False
     # Diccionario para agrupar archivos por producto: producto -> lista de paths
     archivos_por_producto = {prod: [] for prod in products}
     
+    import re
+
     for p in archivos_por_tiempo:
         p_name = p.name
         for prod in products:
@@ -288,18 +290,27 @@ def get_filelist_from_path(data_path, moment_info, products, use_date_tree=False
             # - Bandas espectrales (C04, C07, etc.): buscar "M6C07_" o "CMIPC-M6C07_"
             # - ACTP: buscar "ACTPC-" (Cloud Top Phase)
             if prod.startswith('C'):
-                # Para bandas: buscar el patrón M6Cxx_ en el nombre
-                if f"M6{prod}_" in p_name or f"-{prod}_" in p_name:
+                # Para bandas: admitir múltiples formatos históricos y actuales.
+                # Ejemplos en la práctica:
+                #  - OR_ABI-L2-CMIPC-M3C07_G16_s20190600802133_...  (M3)
+                #  - OR_ABI-L2-CMIPC-M6C07_G16_s...                 (M6)
+                #  - ...-C07_G16_...  (variantes)
+                # La forma más robusta es aceptar si la etiqueta de banda (ej. 'C07')
+                # aparece en el nombre del archivo en contextos razonables.
+                # Usamos una expresión regular simple para evitar coincidencias parciales raras.
+                band_code = prod  # e.g. 'C07'
+                # Buscar patrones como 'M3C07', 'M6C07', '-C07_', '_C07_', 'C07_G16', etc.
+                if re.search(rf"M\d+C{band_code[1:]}\b", p_name) or re.search(rf"[^A-Za-z0-9]{band_code}[^A-Za-z0-9]", p_name) or (band_code in p_name):
                     archivos_por_producto[prod].append(p)
                     break
             elif prod == 'ACTP':
                 # Para ACTP: el archivo se llama ACTPC (con C al final)
-                if "ACTPC-" in p_name or "-ACTP_" in p_name or "-ACTPC-" in p_name:
+                if "ACTPC-" in p_name or "-ACTP_" in p_name or "-ACTPC-" in p_name or "ACTP" in p_name:
                     archivos_por_producto[prod].append(p)
                     break
             else:
                 # Para otros productos: búsqueda estándar
-                if f"-{prod}_" in p_name or f"-{prod}-" in p_name:
+                if f"-{prod}_" in p_name or f"-{prod}-" in p_name or prod in p_name:
                     archivos_por_producto[prod].append(p)
                     break
     
