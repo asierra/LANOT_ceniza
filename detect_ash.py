@@ -1239,33 +1239,41 @@ if __name__ == "__main__":
         # Generar nombre de archivo de salida para cada momento
         if args.output:
             outp = str(args.output)
-            # Si el usuario indicó explícitamente un directorio con '/' al final,
-            # lo interpretamos como directorio incluso si no existe y lo creamos.
-            if outp.endswith(os.path.sep):
-                output_dir = Path(outp)
+            output_path = Path(outp)
+            
+            # Determinar si es un directorio o un archivo:
+            # 1. Si termina en path separator -> directorio explícito
+            # 2. Si existe y es directorio -> directorio
+            # 3. Si no existe pero no tiene extensión .tif/.png -> asumimos directorio
+            # 4. En otro caso -> archivo único
+            
+            is_directory = (
+                outp.endswith(os.path.sep) or
+                output_path.is_dir() or
+                (not output_path.exists() and not outp.endswith('.tif') and not outp.endswith('.png'))
+            )
+            
+            if is_directory:
+                # Tratarlo como directorio
+                output_dir = output_path
                 try:
                     output_dir.mkdir(parents=True, exist_ok=True)
                 except Exception as e:
                     print(f"Error creando el directorio de salida '{output_dir}': {e}")
                     raise
+                
+                # Generar nombre de archivo según momento y región
                 if args.clip and args.clip.endswith('geo'):
                     filename = f"ceniza_{moment_a_procesar}_geo.tif"
                 else:
                     filename = f"ceniza_{moment_a_procesar}.tif"
                 output_file = output_dir / filename
-            elif Path(outp).is_dir():
-                output_dir = Path(outp)
-                if args.clip and args.clip.endswith('geo'):
-                    filename = f"ceniza_{moment_a_procesar}_geo.tif" 
-                else:
-                    filename = f"ceniza_{moment_a_procesar}.tif"
-                output_file = output_dir / filename
             else:
-                # Se trata como archivo de salida; si hay varios momentos, solo se usa el primero
+                # Tratarlo como archivo único
                 if i > 0:
                     print("Advertencia: Se especificó un único archivo de salida para un rango. Solo se procesará el primer momento válido.")
                     break
-                output_file = Path(outp)
+                output_file = output_path
         else:
             if args.clip and args.clip.endswith('geo'):
                 output_file = Path(f"./ceniza_{moment_a_procesar}_geo.tif")
