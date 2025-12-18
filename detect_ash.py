@@ -1247,11 +1247,19 @@ if __name__ == "__main__":
             # 3. Si no existe pero no tiene extensión .tif/.png -> asumimos directorio
             # 4. En otro caso -> archivo único
             
+            print(f"DEBUG: outp='{outp}'")
+            print(f"DEBUG: outp.endswith(os.path.sep)={outp.endswith(os.path.sep)}, os.path.sep='{os.path.sep}'")
+            print(f"DEBUG: output_path.is_dir()={output_path.is_dir()}")
+            print(f"DEBUG: output_path.exists()={output_path.exists()}")
+            print(f"DEBUG: outp.endswith('.tif')={outp.endswith('.tif')}")
+            
             is_directory = (
                 outp.endswith(os.path.sep) or
                 output_path.is_dir() or
                 (not output_path.exists() and not outp.endswith('.tif') and not outp.endswith('.png'))
             )
+            
+            print(f"DEBUG: is_directory={is_directory}")
             
             if is_directory:
                 # Tratarlo como directorio
