@@ -1268,8 +1268,10 @@ if __name__ == "__main__":
                 else:
                     filename = f"ceniza_{moment_a_procesar}.tif"
                 output_file = output_dir / filename
+                print(f"DEBUG: is_directory=True, output_dir={output_dir}, filename={filename}, output_file={output_file}")
             else:
                 # Tratarlo como archivo único
+                print(f"DEBUG: is_directory=False, treating as single file: {output_path}")
                 if i > 0:
                     print("Advertencia: Se especificó un único archivo de salida para un rango. Solo se procesará el primer momento válido.")
                     break
