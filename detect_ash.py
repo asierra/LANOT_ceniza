@@ -1170,7 +1170,7 @@ if __name__ == "__main__":
     parser.add_argument('--moment', type=str, default=None, 
                         help="Momento o rango a procesar. Formatos: 'YYYYjjjHHMM', 'YYYYMMDDHHMM', o 'YYYYMMDDHHmm-HHmm'. "
                              "Por defecto, se calcula el más reciente.")
-    parser.add_argument('--output', type=Path, default=None, 
+    parser.add_argument('--output', type=str, default=None, 
                         help="Ruta de salida para el GeoTIFF. Puede ser un archivo (ej: 'resultado.tif') o un directorio (ej: '/data/salida/'). "
                              "Si es un directorio, se genera automáticamente el nombre 'ceniza_[momento].tif' (o con sufijo '_geo' si se reproyecta). "
                              "Por defecto: './ceniza_[momento].tif'")
@@ -1247,19 +1247,11 @@ if __name__ == "__main__":
             # 3. Si no existe pero no tiene extensión .tif/.png -> asumimos directorio
             # 4. En otro caso -> archivo único
             
-            print(f"DEBUG: outp='{outp}'")
-            print(f"DEBUG: outp.endswith(os.path.sep)={outp.endswith(os.path.sep)}, os.path.sep='{os.path.sep}'")
-            print(f"DEBUG: output_path.is_dir()={output_path.is_dir()}")
-            print(f"DEBUG: output_path.exists()={output_path.exists()}")
-            print(f"DEBUG: outp.endswith('.tif')={outp.endswith('.tif')}")
-            
             is_directory = (
                 outp.endswith(os.path.sep) or
                 output_path.is_dir() or
                 (not output_path.exists() and not outp.endswith('.tif') and not outp.endswith('.png'))
             )
-            
-            print(f"DEBUG: is_directory={is_directory}")
             
             if is_directory:
                 # Tratarlo como directorio
@@ -1276,10 +1268,8 @@ if __name__ == "__main__":
                 else:
                     filename = f"ceniza_{moment_a_procesar}.tif"
                 output_file = output_dir / filename
-                print(f"DEBUG: is_directory=True, output_dir={output_dir}, filename={filename}, output_file={output_file}")
             else:
                 # Tratarlo como archivo único
-                print(f"DEBUG: is_directory=False, treating as single file: {output_path}")
                 if i > 0:
                     print("Advertencia: Se especificó un único archivo de salida para un rango. Solo se procesará el primer momento válido.")
                     break
