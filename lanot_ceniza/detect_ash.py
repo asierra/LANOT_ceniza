@@ -79,9 +79,9 @@ def get_moment(is_conus=True):
 
 def normalize_moment(moment):
     """
-    Normaliza el momento al formato juliano YYYYjjjHHMM.
+    Normaliza el instante al formato juliano YYYYjjjHHMM.
     
-    Detecta automáticamente si el momento está en formato:
+    Detecta automáticamente si el instante está en formato:
     - Juliano (11 dígitos): YYYYjjjHHMM - lo retorna sin cambios
     - Gregoriano (12 dígitos): YYYYMMDDhhmm - lo convierte a juliano
     
@@ -90,7 +90,7 @@ def normalize_moment(moment):
         
     Returns:
         tuple: (moment_julian, year, month, day) donde:
-            - moment_julian es el momento en formato YYYYjjjHHMM
+            - moment_julian es el instante en formato YYYYjjjHHMM
             - year, month, day son strings para construir rutas YYYY/MM/DD
     """
     from datetime import datetime
@@ -106,7 +106,7 @@ def normalize_moment(moment):
         date_obj = datetime.strptime(f"{year}{month}{day}", "%Y%m%d")
         julian_day = f"{date_obj.timetuple().tm_yday:03d}"
         
-        # Construir momento en formato juliano
+        # Construir instante en formato juliano
         moment_julian = f"{year}{julian_day}{hhmm}"
         
         print(f"Momento convertido de gregoriano {moment} a juliano {moment_julian}")
@@ -124,12 +124,12 @@ def normalize_moment(moment):
         
         return moment, year, month, day
     else:
-        raise ValueError(f"Formato de momento inválido: '{moment}'. Debe tener 11 dígitos (YYYYjjjHHMM) o 12 dígitos (YYYYMMDDhhmm)")
+        raise ValueError(f"Formato de instante inválido: '{moment}'. Debe tener 11 dígitos (YYYYjjjHHMM) o 12 dígitos (YYYYMMDDhhmm)")
 
 
 def get_filelist_from_path(data_path, moment, products, use_date_tree=False):
     """
-    Busca archivos en un directorio que coincidan con un momento 'YYYYjjjhhmm" 
+    Busca archivos en un directorio que coincidan con un instante 'YYYYjjjhhmm" 
     y que contengan uno de los identificadores de 'products' en su nombre.
     
     Si hay duplicados (CG_ y OR_), da preferencia a los que empiezan con CG_.
@@ -142,7 +142,7 @@ def get_filelist_from_path(data_path, moment, products, use_date_tree=False):
                               Si False (por defecto), busca directamente en data_path.
     """
     
-    # Normalizar el momento al formato juliano y extraer componentes de fecha
+    # Normalizar el instante al formato juliano y extraer componentes de fecha
     moment_julian, year, month, day = normalize_moment(moment)
     
     # Si use_date_tree es True, construir la ruta con estructura de fecha
@@ -152,7 +152,7 @@ def get_filelist_from_path(data_path, moment, products, use_date_tree=False):
     else:
         search_path = data_path
     
-    # Usar el momento en formato juliano para buscar archivos
+    # Usar el instante en formato juliano para buscar archivos
     patron_base = f"*s{moment_julian}*.nc"
 
     print(f"Buscando archivos en: {search_path}")
@@ -525,7 +525,7 @@ def create_color_png(data_array, output_path, color_table_path=None, bounds=None
 
 def main(data_path, moment, output_path, clip_region=None, create_png=False, use_date_tree=False):
     """Función principal para ejecutar el proceso de detección de cenizas."""
-    print(f"Iniciando detección para el momento: {moment}")
+    print(f"Iniciando detección para el instante: {moment}")
     
     # Validar y obtener los límites de la región de recorte si se especificó
     reproject_to_geo = False
@@ -555,7 +555,7 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False, use
     
     archivos = get_filelist_from_path(data_path, moment, productos, use_date_tree=use_date_tree)
     if not archivos:
-        print(f"Error: No se encontró ningún archivo con este momento {moment}.")
+        print(f"Error: No se encontró ningún archivo con este instante {moment}.")
         return
     if len(archivos) != len(productos):
         print(f"Error: Se encontraron {len(archivos)} archivos, pero se esperaban {len(productos)}.")
@@ -1024,20 +1024,20 @@ if __name__ == "__main__":
     parser.add_argument('--moment', type=str, default=None, help="Momento a procesar en formato 'YYYYjjjHHMM'. Por defecto, se calcula el más reciente.")
     parser.add_argument('--output', type=Path, default=None, 
                         help="Ruta de salida para el GeoTIFF. Puede ser un archivo (ej: 'resultado.tif') o un directorio (ej: '/data/salida/'). "
-                             "Si es un directorio, se genera automáticamente el nombre 'ceniza_[momento].tif' (o con sufijo '_geo' si se reproyecta). "
-                             "Por defecto: './ceniza_[momento].tif'")
+                             "Si es un directorio, se genera automáticamente el nombre 'ceniza_[instante].tif' (o con sufijo '_geo' si se reproyecta). "
+                             "Por defecto: './ceniza_[instante].tif'")
     parser.add_argument('--clip', type=str, choices=list(CLIP_REGIONS_WITH_GEO.keys()), default=None, 
                         help=f"Región para recortar el resultado final. Agrega 'geo' al final para reproyectar a lat/lon. Opciones: {', '.join(CLIP_REGIONS.keys())} (o con sufijo 'geo')")
     parser.add_argument('--png', action='store_true', help="Genera también una imagen PNG a color con la misma resolución que el GeoTIFF")
     parser.add_argument('--date-tree', action='store_true', 
-                        help="Usa estructura de directorios YYYY/MM/DD dentro de --path para localizar los archivos según el momento especificado")
+                        help="Usa estructura de directorios YYYY/MM/DD dentro de --path para localizar los archivos según el instante especificado")
     
     args = parser.parse_args()
 
     if args.moment:
         moment_a_procesar = args.moment
     else:
-        # Esta función obtiene el momento más reciente en formato 'YYYYjjjhhmm'
+        # Esta función obtiene el instante más reciente en formato 'YYYYjjjhhmm'
         moment_a_procesar = get_moment()
 
     if args.output:

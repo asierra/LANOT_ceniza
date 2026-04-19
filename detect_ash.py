@@ -84,9 +84,9 @@ def get_moment(is_conus=True):
 
 def normalize_moment(moment):
     """
-    Normaliza el momento al formato juliano YYYYjjjHHMM.
+    Normaliza el instante al formato juliano YYYYjjjHHMM.
     
-    Detecta automáticamente si el momento está en formato:
+    Detecta automáticamente si el instante está en formato:
     - Juliano (11 dígitos): YYYYjjjHHMM - lo retorna sin cambios
     - Gregoriano (12 dígitos): YYYYMMDDhhmm - lo convierte a juliano
     
@@ -95,7 +95,7 @@ def normalize_moment(moment):
         
     Returns:
         tuple: (moment_julian, year, month, day) donde:
-            - moment_julian es el momento en formato YYYYjjjHHMM
+            - moment_julian es el instante en formato YYYYjjjHHMM
             - year, month, day son strings para construir rutas YYYY/MM/DD
     """
     from datetime import datetime
@@ -111,7 +111,7 @@ def normalize_moment(moment):
         date_obj = datetime.strptime(f"{year}{month}{day}", "%Y%m%d")
         julian_day = f"{date_obj.timetuple().tm_yday:03d}"
         
-        # Construir momento en formato juliano
+        # Construir instante en formato juliano
         moment_julian = f"{year}{julian_day}{hhmm}"
         
         logger.debug(f"Momento {moment} (gregoriano) normalizado a {moment_julian} (juliano).")
@@ -130,12 +130,12 @@ def normalize_moment(moment):
         logger.debug(f"Momento {moment} (juliano) confirmado.")
         return moment, year, month, day
     else:
-        raise ValueError(f"Formato de momento inválido: '{moment}'. Debe tener 11 dígitos (YYYYjjjHHMM) o 12 dígitos (YYYYMMDDhhmm)")
+        raise ValueError(f"Formato de instante inválido: '{moment}'. Debe tener 11 dígitos (YYYYjjjHHMM) o 12 dígitos (YYYYMMDDhhmm)")
 
 
 def parse_moment_string(moment_str, interval_minutes=5):
     """
-    Parsea un string de momento, que puede ser un único momento o un rango.
+    Parsea un string de instante, que puede ser un único instante o un rango.
 
     Formatos soportados:
     - Momento único (Gregoriano): 'YYYYMMDDHHMM' (12 dígitos)
@@ -144,8 +144,8 @@ def parse_moment_string(moment_str, interval_minutes=5):
     - Rango (Juliano): 'YYYYjjjHHmm-HHmm' (ej. '20240580411-0426')
 
     Args:
-        moment_str (str): El string de momento a parsear.
-        interval_minutes (int): El incremento en minutos para generar momentos en un rango (por defecto 5 min).
+        moment_str (str): El string de instante a parsear.
+        interval_minutes (int): El incremento en minutos para generar instantes en un rango (por defecto 5 min).
 
     Returns:
         list[tuple]: Una lista de tuplas. Cada tupla contiene:
@@ -153,7 +153,7 @@ def parse_moment_string(moment_str, interval_minutes=5):
                      Esto evita recalcular la información de fecha repetidamente.
     """
     if '-' in moment_str:
-        logger.info(f"Detectado rango de momentos: {moment_str}")
+        logger.info(f"Detectado rango de instantes: {moment_str}")
         
         # Determinar si es formato gregoriano (17 chars) o juliano (16 chars)
         if len(moment_str) == 17:  # Formato YYYYMMDDHHmm-HHmm (gregoriano)
@@ -197,25 +197,25 @@ def parse_moment_string(moment_str, interval_minutes=5):
             moments.append((julian_moment, year, month, day))
             current_dt += datetime.timedelta(minutes=interval_minutes)
         
-        logger.info(f"Rango expandido a {len(moments)} momentos (intervalo de {interval_minutes} min).")
+        logger.info(f"Rango expandido a {len(moments)} instantes (intervalo de {interval_minutes} min).")
         return moments
 
     elif len(moment_str) == 11 or len(moment_str) == 12:
-        # Es un momento único, lo normalizamos y lo devolvemos en una lista con una tupla
+        # Es un instante único, lo normalizamos y lo devolvemos en una lista con una tupla
         return [normalize_moment(moment_str)]
     else:
-        raise ValueError(f"Formato de momento o rango no reconocido: '{moment_str}'")
+        raise ValueError(f"Formato de instante o rango no reconocido: '{moment_str}'")
 
 
 def group_and_report_failures(failed_moments, interval_minutes=5):
     """
-    Agrupa momentos fallidos consecutivos en rangos y los imprime.
+    Agrupa instantes fallidos consecutivos en rangos y los imprime.
     """
     if not failed_moments:
         return
 
     print("\n--- Resumen de Fallas ---")
-    print(f"Advertencia: No se encontraron datos completos para {len(failed_moments)} momentos.")
+    print(f"Advertencia: No se encontraron datos completos para {len(failed_moments)} instantes.")
 
     # Ordenar por si acaso, aunque deberían venir ordenados
     failed_moments.sort()
@@ -228,7 +228,7 @@ def group_and_report_failures(failed_moments, interval_minutes=5):
             prev_dt = datetime.datetime.strptime(failed_moments[i-1], "%Y%j%H%M")
             curr_dt = datetime.datetime.strptime(failed_moments[i], "%Y%j%H%M")
             
-            # Si el momento actual no es consecutivo al anterior, cerramos el grupo
+            # Si el instante actual no es consecutivo al anterior, cerramos el grupo
             if (curr_dt - prev_dt) > datetime.timedelta(minutes=interval_minutes):
                 groups.append((start_of_group, failed_moments[i-1]))
                 start_of_group = failed_moments[i]
@@ -241,7 +241,7 @@ def group_and_report_failures(failed_moments, interval_minutes=5):
 
 def get_filelist_from_path(data_path, moment_info, products, use_date_tree=False, verbose=True):
     """
-    Busca archivos en un directorio que coincidan con un momento 'YYYYjjjhhmm" 
+    Busca archivos en un directorio que coincidan con un instante 'YYYYjjjhhmm" 
     y que contengan uno de los identificadores de 'products' en su nombre.
     
     Args:
@@ -252,7 +252,7 @@ def get_filelist_from_path(data_path, moment_info, products, use_date_tree=False
         verbose (bool): Si True, imprime información detallada del proceso de búsqueda.
     """
     
-    # Desempaquetar la información del momento
+    # Desempaquetar la información del instante
     moment_julian, year, month, day = moment_info
     
     # Construir la ruta de búsqueda
@@ -262,8 +262,8 @@ def get_filelist_from_path(data_path, moment_info, products, use_date_tree=False
     else:
         search_path = data_path
     
-    # Usar el momento en formato juliano para buscar archivos
-    # Patrón completo YYYYjjjHHMM para buscar archivos que coincidan con el momento
+    # Usar el instante en formato juliano para buscar archivos
+    # Patrón completo YYYYjjjHHMM para buscar archivos que coincidan con el instante
     patron_base = f"*s{moment_julian}*.nc"
 
     if verbose:
@@ -656,7 +656,7 @@ def create_color_png(data_array, output_path, color_table_path=None, bounds=None
 
 def main(data_path, moment_info, output_path, clip_region=None, create_png=False, use_date_tree=False, eph=None, ts=None):
     """Función principal para ejecutar el proceso de detección de cenizas."""
-    logger.debug(f"Iniciando detección para el momento: {moment_info[0]}")
+    logger.debug(f"Iniciando detección para el instante: {moment_info[0]}")
     
     # Validar y obtener los límites de la región de recorte si se especificó
     reproject_to_geo = False
@@ -686,7 +686,7 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
     
     archivos = get_filelist_from_path(data_path, moment_info, productos, use_date_tree=use_date_tree)
     if not archivos:
-        print(f"Error: No se encontró ningún archivo con este momento {moment_info[0]}.")
+        print(f"Error: No se encontró ningún archivo con este instante {moment_info[0]}.")
         return
     if len(archivos) != len(productos):
         print(f"Error: Se encontraron {len(archivos)} archivos, pero se esperaban {len(productos)}. (Momento: {moment_info[0]})")
@@ -1176,17 +1176,17 @@ if __name__ == "__main__":
                              "Por defecto, se calcula el más reciente.")
     parser.add_argument('--output', type=str, default=None, 
                         help="Ruta de salida para el GeoTIFF. Puede ser un archivo (ej: 'resultado.tif') o un directorio (ej: '/data/salida/'). "
-                             "Si es un directorio, se genera automáticamente el nombre 'ceniza_[momento].tif' (o con sufijo '_geo' si se reproyecta). "
-                             "Por defecto: './ceniza_[momento].tif'")
+                             "Si es un directorio, se genera automáticamente el nombre 'ceniza_[instante].tif' (o con sufijo '_geo' si se reproyecta). "
+                             "Por defecto: './ceniza_[instante].tif'")
     parser.add_argument('--clip', type=str, choices=list(CLIP_REGIONS_WITH_GEO.keys()), default=None, 
                         help=f"Región para recortar el resultado final. Agrega 'geo' al final para reproyectar a lat/lon. Opciones: {', '.join(CLIP_REGIONS.keys())} (o con sufijo 'geo')")
     parser.add_argument('--png', action='store_true', 
                         help="Genera también una imagen PNG a color con la misma resolución que el GeoTIFF")
     parser.add_argument('--date-tree', action='store_true', 
-                        help="Usa estructura de directorios YYYY/MM/DD dentro de --path para localizar los archivos según el momento especificado")
+                        help="Usa estructura de directorios YYYY/MM/DD dentro de --path para localizar los archivos según el instante especificado")
     parser.add_argument('--dry-run', action='store_true',
-                        help="Realiza una verificación de archivos para el momento o rango especificado sin procesar los datos. "
-                             "Informa qué momentos tienen datos completos y cuáles no.")
+                        help="Realiza una verificación de archivos para el instante o rango especificado sin procesar los datos. "
+                             "Informa qué instantes tienen datos completos y cuáles no.")
     parser.add_argument('-v', '--verbose', action='store_true',
                         help="Modo verbose: muestra información detallada del procesamiento. "
                              "Por defecto, solo se muestran mensajes esenciales de progreso.")
@@ -1197,7 +1197,7 @@ if __name__ == "__main__":
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=log_level, format='%(message)s', force=True)
 
-    # --- 1. Determinar la lista de momentos a procesar ---
+    # --- 1. Determinar la lista de instantes a procesar ---
     if args.moment:
         try:
             moment_list = parse_moment_string(args.moment)
@@ -1205,38 +1205,38 @@ if __name__ == "__main__":
             print(f"Error: {e}")
             exit(1)
     else:
-        # Obtiene el momento más reciente en formato 'YYYYjjjHHMM'
+        # Obtiene el instante más reciente en formato 'YYYYjjjHHMM'
         moment_list = [get_moment()]
 
     # --- 2. Verificación de archivos (Pre-flight check) ---
     print("\n--- Verificando disponibilidad de archivos ---")
     productos_requeridos = ["ACTP", "C04", "C07", "C11", "C13", "C14", "C15"]
-    momentos_validos = []
-    momentos_fallidos = []
+    instantes_validos = []
+    instantes_fallidos = []
 
     for moment_info in moment_list:
         files = get_filelist_from_path(args.path, moment_info, productos_requeridos, use_date_tree=args.date_tree, verbose=False)
         if len(files) == len(productos_requeridos):
-            momentos_validos.append(moment_info)
+            instantes_validos.append(moment_info)
         else:
-            momentos_fallidos.append(moment_info[0]) # Solo guardamos el string del momento para el reporte
+            instantes_fallidos.append(moment_info[0]) # Solo guardamos el string del instante para el reporte
 
     # --- 3. Reportar resultados de la verificación ---
-    group_and_report_failures(momentos_fallidos)
+    group_and_report_failures(instantes_fallidos)
 
-    if momentos_validos:
-        logger.info(f"\nSe encontraron datos completos para {len(momentos_validos)} momentos.")
+    if instantes_validos:
+        logger.info(f"\nSe encontraron datos completos para {len(instantes_validos)} instantes.")
     
-    if not momentos_validos:
-        logger.info("\nNo se encontraron datos completos para ningún momento en el rango especificado. Terminando.")
+    if not instantes_validos:
+        logger.info("\nNo se encontraron datos completos para ningún instante en el rango especificado. Terminando.")
         exit(0)
 
     if args.dry_run:
         logger.info("\nModo 'dry-run' activado. No se realizará ningún procesamiento. Terminando.")
         exit(0)
 
-    # --- 4. Procesar momentos válidos ---
-    logger.info(f"\n--- Iniciando procesamiento para {len(momentos_validos)} momentos válidos ---")
+    # --- 4. Procesar instantes válidos ---
+    logger.info(f"\n--- Iniciando procesamiento para {len(instantes_validos)} instantes válidos ---")
     
     # Cargar recursos pesados una sola vez
     logger.debug("Cargando efemérides de Skyfield (una sola vez)...")
@@ -1244,14 +1244,14 @@ if __name__ == "__main__":
     ts_global = load.timescale()
     
     # Contadores para estadísticas
-    momentos_exitosos = 0
-    momentos_fallidos = 0
+    instantes_exitosos = 0
+    instantes_fallidos = 0
     
-    for i, moment_info in enumerate(momentos_validos):
+    for i, moment_info in enumerate(instantes_validos):
         moment_a_procesar = moment_info[0]
-        logger.info(f"\n[{i+1}/{len(momentos_validos)}] Procesando momento: {moment_a_procesar}")
+        logger.info(f"\n[{i+1}/{len(instantes_validos)}] Procesando instante: {moment_a_procesar}")
         
-        # Generar nombre de archivo de salida para cada momento
+        # Generar nombre de archivo de salida para cada instante
         if args.output:
             outp = str(args.output)
             output_path = Path(outp)
@@ -1277,7 +1277,7 @@ if __name__ == "__main__":
                     print(f"Error creando el directorio de salida '{output_dir}': {e}")
                     raise
                 
-                # Generar nombre de archivo según momento y región
+                # Generar nombre de archivo según instante y región
                 if args.clip and args.clip.endswith('geo'):
                     filename = f"ceniza_{moment_a_procesar}_geo.tif"
                 else:
@@ -1286,7 +1286,7 @@ if __name__ == "__main__":
             else:
                 # Tratarlo como archivo único
                 if i > 0:
-                    print("Advertencia: Se especificó un único archivo de salida para un rango. Solo se procesará el primer momento válido.")
+                    print("Advertencia: Se especificó un único archivo de salida para un rango. Solo se procesará el primer instante válido.")
                     break
                 output_file = output_path
         else:
@@ -1306,17 +1306,17 @@ if __name__ == "__main__":
                 eph=eph_global,
                 ts=ts_global
             )
-            momentos_exitosos += 1
+            instantes_exitosos += 1
         except Exception as e:
-            momentos_fallidos += 1
-            logger.error(f"\n*** Error procesando momento {moment_a_procesar}: {e}")
-            logger.debug("Continuando con el siguiente momento...")
+            instantes_fallidos += 1
+            logger.error(f"\n*** Error procesando instante {moment_a_procesar}: {e}")
+            logger.debug("Continuando con el siguiente instante...")
             import traceback
             traceback.print_exc()
             continue
 
     # Mostrar estadísticas finales
     logger.info("\n--- Procesamiento completado. ---")
-    logger.info(f"Momentos procesados exitosamente: {momentos_exitosos} de {len(momentos_validos)}")
-    if momentos_fallidos > 0:
-        logger.info(f"Momentos fallidos: {momentos_fallidos}")
+    logger.info(f"Momentos procesados exitosamente: {instantes_exitosos} de {len(instantes_validos)}")
+    if instantes_fallidos > 0:
+        logger.info(f"Momentos fallidos: {instantes_fallidos}")

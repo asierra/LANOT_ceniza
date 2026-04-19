@@ -101,13 +101,13 @@ Para utilizar la herramienta de dibujo de mapas `mapdrawer.py` como un comando d
 
 ### Ejecución básica
 
-Procesar el momento más reciente automáticamente:
+Procesar el instante más reciente automáticamente:
 
 ```bash
 ./detect_ash.py
 ```
 
-Procesar un momento específico:
+Procesar un instante específico:
 
 ```bash
 ./detect_ash.py --path /data/ceniza/2019/spring --moment 20191001731
@@ -133,8 +133,8 @@ Especificar archivo o directorio de salida:
 - `--moment`: Momento a procesar en formato `YYYYjjjHHMM` (año, día juliano, hora y minuto). Si no se especifica, se calcula automáticamente el más reciente
 - `--output`: Ruta de salida para el GeoTIFF. Puede ser:
   - **Un archivo**: `resultado.tif` - Guarda con ese nombre
-  - **Un directorio**: `/data/salida/` - Genera automáticamente `ceniza_[momento].tif` (o con sufijo `_geo` si se reproyecta)
-  - **Por defecto**: `./ceniza_[momento].tif`
+  - **Un directorio**: `/data/salida/` - Genera automáticamente `ceniza_[instante].tif` (o con sufijo `_geo` si se reproyecta)
+  - **Por defecto**: `./ceniza_[instante].tif`
 - `--clip`: Región para recortar el resultado. Opciones disponibles:
   - `centromex`: Centro de México (proyección GOES nativa)
   - `centromexgeo`: Centro de México (reproyectado a lat/lon EPSG:4326)
@@ -395,7 +395,7 @@ Este enfoque minimiza el uso de memoria y acelera significativamente el procesam
 
 ## Notas técnicas
 
-- El script determina automáticamente el momento más reciente según la cadencia del dominio:
+- El script determina automáticamente el instante más reciente según la cadencia del dominio:
   - **CONUS**: Minutos terminados en 1 o 6 (ej: 01, 06, 11, 16, 21, 26, 31, 36, 41, 46, 51, 56)
   - **Full Disk**: Múltiplos de 10 (ej: 00, 10, 20, 30, 40, 50)
 - Los archivos de efemérides (de421.bsp) se descargan automáticamente por Skyfield la primera vez
