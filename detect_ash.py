@@ -239,6 +239,60 @@ def group_and_report_failures(failed_moments, interval_minutes=5):
         print(f"  - Intervalo fallido: {start} a {end}" if start != end else f"  - Momento fallido: {start}")
 
 
+def detect_goes_minute_offset(data_path, first_moment_info, use_date_tree=False, window_minutes=4):
+    """
+    Detecta el desfase real en minutos de los archivos GOES respecto a los instantes
+    nominales generados (p. ej. :01/:06 en lugar de :00/:05, o :02/:07).
+
+    Escanea el directorio de datos buscando cualquier archivo .nc cuya marca de
+    tiempo caiga dentro de una ventana de ±window_minutes alrededor del primer
+    instante del rango. El primer offset que produce una coincidencia se aplica
+    a todos los demás instantes del rango.
+
+    Args:
+        data_path (Path): Ruta base de datos L2.
+        first_moment_info (tuple): Primer (moment_julian, year, month, day) del rango.
+        use_date_tree (bool): Si True, usa estructura YYYY/MM/DD para construir la ruta.
+        window_minutes (int): Ventana de búsqueda en minutos alrededor del instante nominal.
+
+    Returns:
+        int: Desfase detectado en minutos (0 si no se detecta ninguno o si hay coincidencia exacta).
+    """
+    moment_julian, year, month, day = first_moment_info
+
+    search_path = (data_path / year / month / day) if use_date_tree else data_path
+    if not search_path.is_dir():
+        return 0
+
+    base_dt = datetime.datetime.strptime(moment_julian, "%Y%j%H%M")
+
+    # Probar desde offset 0 hacia adelante, luego hacia atrás, para no asumir dirección
+    offsets_to_try = sorted(range(-window_minutes, window_minutes + 1), key=abs)
+    for offset in offsets_to_try:
+        candidate_dt = base_dt + datetime.timedelta(minutes=offset)
+        candidate_moment = (
+            f"{candidate_dt.strftime('%Y')}"
+            f"{candidate_dt.strftime('%j')}"
+            f"{candidate_dt.strftime('%H%M')}"
+        )
+        if any(search_path.glob(f"*s{candidate_moment}*.nc")):
+            if offset != 0:
+                logger.info(
+                    f"Desfase GOES detectado: {offset:+d} min "
+                    f"(nominal {moment_julian} → archivo en {candidate_moment}). "
+                    f"Ajustando todos los instantes del rango."
+                )
+            else:
+                logger.debug(f"Sin desfase: archivos coinciden con el instante nominal.")
+            return offset
+
+    logger.debug(
+        f"No se encontró ningún archivo cerca de {moment_julian} "
+        f"(ventana ±{window_minutes} min). Sin ajuste de desfase."
+    )
+    return 0
+
+
 def get_filelist_from_path(data_path, moment_info, products, use_date_tree=False, verbose=True):
     """
     Busca archivos en un directorio que coincidan con un instante 'YYYYjjjhhmm" 
@@ -1207,6 +1261,20 @@ if __name__ == "__main__":
     else:
         # Obtiene el instante más reciente en formato 'YYYYjjjHHMM'
         moment_list = [get_moment()]
+
+    # --- 1b. Detectar y aplicar desfase de minutos GOES ---
+    # Los archivos GOES-CONUS no siempre empiezan en minutos múltiplos de 5;
+    # pueden tener un offset de +1 o +2 min (:01/:06 o :02/:07). Se detecta
+    # automáticamente a partir del primer instante del rango.
+    if len(moment_list) > 1:
+        offset = detect_goes_minute_offset(args.path, moment_list[0], use_date_tree=args.date_tree)
+        if offset != 0:
+            adjusted = []
+            for (moment_julian, _y, _mo, _d) in moment_list:
+                dt = datetime.datetime.strptime(moment_julian, "%Y%j%H%M") + datetime.timedelta(minutes=offset)
+                new_julian = f"{dt.strftime('%Y')}{dt.strftime('%j')}{dt.strftime('%H%M')}"
+                adjusted.append((new_julian, dt.strftime('%Y'), dt.strftime('%m'), dt.strftime('%d')))
+            moment_list = adjusted
 
     # --- 2. Verificación de archivos (Pre-flight check) ---
     print("\n--- Verificando disponibilidad de archivos ---")
