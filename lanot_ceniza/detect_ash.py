@@ -918,22 +918,12 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False, use
         255: (0, 0, 0, 0)          # nodata - transparente (sin datos válidos)
     }
     
-    # Convertir a RGBA para que QGIS respete la transparencia
     # Usar los datos del output_da (que pueden estar reproyectados)
-    data_to_save = output_da.values
+    data_to_save = output_da.values.astype(np.uint8)
     height, width = data_to_save.shape
-    rgba = np.zeros((height, width, 4), dtype=np.uint8)
     
-    for value, (r, g, b, a) in color_table.items():
-        mask = (data_to_save == value)
-        rgba[mask, 0] = r  # Red
-        rgba[mask, 1] = g  # Green
-        rgba[mask, 2] = b  # Blue
-        rgba[mask, 3] = a  # Alpha
-    
-    # Guardar como GeoTIFF RGBA
+    # Guardar como GeoTIFF de 1 banda con colormap incrustado
     import rasterio
-    from rasterio.transform import from_bounds
     
     # Obtener transform y CRS del DataArray original
     transform = output_da.rio.transform()
@@ -945,25 +935,18 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False, use
         driver='GTiff',
         height=height,
         width=width,
-        count=4,  # 4 bandas: R, G, B, A
+        count=1,
         dtype=rasterio.uint8,
         crs=crs,
         transform=transform,
         compress='LZW',
-        photometric='RGB'
+        nodata=255
     ) as dst:
-        dst.write(rgba[:, :, 0], 1)  # Red
-        dst.write(rgba[:, :, 1], 2)  # Green
-        dst.write(rgba[:, :, 2], 3)  # Blue
-        dst.write(rgba[:, :, 3], 4)  # Alpha
-        dst.colorinterp = [
-            rasterio.enums.ColorInterp.red,
-            rasterio.enums.ColorInterp.green,
-            rasterio.enums.ColorInterp.blue,
-            rasterio.enums.ColorInterp.alpha
-        ]
+        dst.write_colormap(1, color_table)
+        dst.write(data_to_save, 1)
     
-    print("¡Archivo GeoTIFF guardado con éxito (formato RGBA con transparencia)!")
+    print(f"¡Archivo GeoTIFF guardado con éxito (formato 1 banda con colormap)!")
+    print(f"Ruta: {Path(output_path).resolve()}")
     
     # Crear imagen PNG a color si se solicita
     if create_png:
@@ -1020,13 +1003,14 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False, use
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Detecta ceniza volcánica a partir de datos GOES L2.")
-    parser.add_argument('--path', type=Path, default=l2_path, help=f"Ruta al directorio de datos L2. Por defecto: {l2_path}")
-    parser.add_argument('--moment', type=str, default=None, help="Momento a procesar en formato 'YYYYjjjHHMM'. Por defecto, se calcula el más reciente.")
-    parser.add_argument('--output', type=Path, default=None, 
+    parser.add_argument('-p', '--path', type=Path, default=l2_path, help=f"Ruta al directorio de datos L2. Por defecto: {l2_path}")
+    parser.add_argument('-m', '--instant', '--moment', dest='instant', type=str, default=None, 
+                        help="Instante a procesar en formato 'YYYYjjjHHMM'. Por defecto, se calcula el más reciente.")
+    parser.add_argument('-o', '--output', type=Path, default=None, 
                         help="Ruta de salida para el GeoTIFF. Puede ser un archivo (ej: 'resultado.tif') o un directorio (ej: '/data/salida/'). "
                              "Si es un directorio, se genera automáticamente el nombre 'ceniza_[instante].tif' (o con sufijo '_geo' si se reproyecta). "
                              "Por defecto: './ceniza_[instante].tif'")
-    parser.add_argument('--clip', type=str, choices=list(CLIP_REGIONS_WITH_GEO.keys()), default=None, 
+    parser.add_argument('-c', '--clip', type=str, choices=list(CLIP_REGIONS_WITH_GEO.keys()), default=None, 
                         help=f"Región para recortar el resultado final. Agrega 'geo' al final para reproyectar a lat/lon. Opciones: {', '.join(CLIP_REGIONS.keys())} (o con sufijo 'geo')")
     parser.add_argument('--png', action='store_true', help="Genera también una imagen PNG a color con la misma resolución que el GeoTIFF")
     parser.add_argument('--date-tree', action='store_true', 
@@ -1034,8 +1018,8 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
-    if args.moment:
-        moment_a_procesar = args.moment
+    if args.instant:
+        moment_a_procesar = args.instant
     else:
         # Esta función obtiene el instante más reciente en formato 'YYYYjjjhhmm'
         moment_a_procesar = get_moment()

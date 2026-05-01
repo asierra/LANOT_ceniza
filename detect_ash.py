@@ -207,18 +207,19 @@ def parse_moment_string(moment_str, interval_minutes=5):
         raise ValueError(f"Formato de instante o rango no reconocido: '{moment_str}'")
 
 
-def group_and_report_failures(failed_moments, interval_minutes=5):
+def group_and_report_failures(failed_info, interval_minutes=5, verbose=False):
     """
-    Agrupa instantes fallidos consecutivos en rangos y los imprime.
+    Agrupa instantes fallidos consecutivos en rangos y los imprime junto con las rutas.
     """
-    if not failed_moments:
+    if not failed_info:
         return
 
     print("\n--- Resumen de Fallas ---")
-    print(f"Advertencia: No se encontraron datos completos para {len(failed_moments)} instantes.")
+    print(f"Advertencia: No se encontraron datos completos para {len(failed_info)} instantes.")
 
-    # Ordenar por si acaso, aunque deberían venir ordenados
-    failed_moments.sort()
+    # Extraer solo los instantes para el agrupamiento, manteniendo la referencia de las rutas
+    failed_moments = sorted([info[0] for info in failed_info])
+    moment_to_path = {info[0]: info[1] for info in failed_info}
     
     groups = []
     if len(failed_moments) > 0:
@@ -236,7 +237,14 @@ def group_and_report_failures(failed_moments, interval_minutes=5):
         groups.append((start_of_group, failed_moments[-1]))
 
     for start, end in groups:
-        print(f"  - Intervalo fallido: {start} a {end}" if start != end else f"  - Momento fallido: {start}")
+        if start != end:
+            print(f"  - Intervalo fallido: {start} a {end}")
+        else:
+            print(f"  - Instante fallido: {start}")
+            
+        if verbose:
+            path_searched = moment_to_path[start]
+            print(f"    Ruta buscada: {path_searched}")
 
 
 def detect_goes_minute_offset(data_path, first_moment_info, use_date_tree=False, window_minutes=4):
@@ -1121,22 +1129,12 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
         255: (0, 0, 0, 0)          # nodata - transparente (sin datos válidos)
     }
     
-    # Convertir a RGBA para que QGIS respete la transparencia
     # Usar los datos del output_da (que pueden estar reproyectados)
-    data_to_save = output_da.values
+    data_to_save = output_da.values.astype(np.uint8)
     height, width = data_to_save.shape
-    rgba = np.zeros((height, width, 4), dtype=np.uint8)
     
-    for value, (r, g, b, a) in color_table.items():
-        mask = (data_to_save == value)
-        rgba[mask, 0] = r  # Red
-        rgba[mask, 1] = g  # Green
-        rgba[mask, 2] = b  # Blue
-        rgba[mask, 3] = a  # Alpha
-    
-    # Guardar como GeoTIFF RGBA
+    # Guardar como GeoTIFF de 1 banda con colormap incrustado
     import rasterio
-    from rasterio.transform import from_bounds
     
     # Obtener transform y CRS del DataArray original
     transform = output_da.rio.transform()
@@ -1148,25 +1146,18 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
         driver='GTiff',
         height=height,
         width=width,
-        count=4,  # 4 bandas: R, G, B, A
+        count=1,
         dtype=rasterio.uint8,
         crs=crs,
         transform=transform,
         compress='LZW',
-        photometric='RGB'
+        nodata=255
     ) as dst:
-        dst.write(rgba[:, :, 0], 1)  # Red
-        dst.write(rgba[:, :, 1], 2)  # Green
-        dst.write(rgba[:, :, 2], 3)  # Blue
-        dst.write(rgba[:, :, 3], 4)  # Alpha
-        dst.colorinterp = [
-            rasterio.enums.ColorInterp.red,
-            rasterio.enums.ColorInterp.green,
-            rasterio.enums.ColorInterp.blue,
-            rasterio.enums.ColorInterp.alpha
-        ]
+        dst.write_colormap(1, color_table)
+        dst.write(data_to_save, 1)
     
-    print("¡Archivo GeoTIFF guardado con éxito (formato RGBA con transparencia)!")
+    print(f"¡Archivo GeoTIFF guardado con éxito (formato 1 banda con colormap)!")
+    print(f"Ruta: {Path(output_path).resolve()}")
     
     # Crear imagen PNG a color si se solicita
     if create_png:
@@ -1223,16 +1214,16 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Detecta ceniza volcánica a partir de datos GOES L2.")
-    parser.add_argument('--path', type=Path, default=l2_path, 
+    parser.add_argument('-p', '--path', type=Path, default=l2_path, 
                         help=f"Ruta al directorio de datos L2. Por defecto: {l2_path}")
-    parser.add_argument('--moment', type=str, default=None, 
-                        help="Momento o rango a procesar. Formatos: 'YYYYjjjHHMM', 'YYYYMMDDHHMM', o 'YYYYMMDDHHmm-HHmm'. "
+    parser.add_argument('-m', '--instant', '--moment', dest='instant', type=str, default=None, 
+                        help="Instante o rango a procesar. Formatos: 'YYYYjjjHHMM', 'YYYYMMDDHHMM', o 'YYYYMMDDHHmm-HHmm'. "
                              "Por defecto, se calcula el más reciente.")
-    parser.add_argument('--output', type=str, default=None, 
+    parser.add_argument('-o', '--output', type=str, default=None, 
                         help="Ruta de salida para el GeoTIFF. Puede ser un archivo (ej: 'resultado.tif') o un directorio (ej: '/data/salida/'). "
                              "Si es un directorio, se genera automáticamente el nombre 'ceniza_[instante].tif' (o con sufijo '_geo' si se reproyecta). "
                              "Por defecto: './ceniza_[instante].tif'")
-    parser.add_argument('--clip', type=str, choices=list(CLIP_REGIONS_WITH_GEO.keys()), default=None, 
+    parser.add_argument('-c', '--clip', type=str, choices=list(CLIP_REGIONS_WITH_GEO.keys()), default=None, 
                         help=f"Región para recortar el resultado final. Agrega 'geo' al final para reproyectar a lat/lon. Opciones: {', '.join(CLIP_REGIONS.keys())} (o con sufijo 'geo')")
     parser.add_argument('--png', action='store_true', 
                         help="Genera también una imagen PNG a color con la misma resolución que el GeoTIFF")
@@ -1252,15 +1243,15 @@ if __name__ == "__main__":
     logging.basicConfig(level=log_level, format='%(message)s', force=True)
 
     # --- 1. Determinar la lista de instantes a procesar ---
-    if args.moment:
+    if args.instant:
         try:
-            moment_list = parse_moment_string(args.moment)
+            moment_list = parse_moment_string(args.instant)
         except ValueError as e:
             print(f"Error: {e}")
             exit(1)
     else:
         # Obtiene el instante más reciente en formato 'YYYYjjjHHMM'
-        moment_list = [get_moment()]
+        moment_list = [normalize_moment(get_moment())]
 
     # --- 1b. Detectar y aplicar desfase de minutos GOES ---
     # Los archivos GOES-CONUS no siempre empiezan en minutos múltiplos de 5;
@@ -1283,14 +1274,23 @@ if __name__ == "__main__":
     instantes_fallidos = []
 
     for moment_info in moment_list:
-        files = get_filelist_from_path(args.path, moment_info, productos_requeridos, use_date_tree=args.date_tree, verbose=False)
+        files = get_filelist_from_path(args.path, moment_info, productos_requeridos, use_date_tree=args.date_tree, verbose=args.verbose)
         if len(files) == len(productos_requeridos):
             instantes_validos.append(moment_info)
         else:
-            instantes_fallidos.append(moment_info[0]) # Solo guardamos el string del instante para el reporte
+            # Desempaquetar la información del instante para mostrar la ruta buscada
+            moment_julian, year, month, day = moment_info
+            
+            # Determinar la ruta de búsqueda real
+            if args.date_tree:
+                search_path = args.path / year / month / day
+            else:
+                search_path = args.path
+                
+            instantes_fallidos.append((moment_julian, search_path)) # Guardamos el instante y la ruta buscada para el reporte
 
     # --- 3. Reportar resultados de la verificación ---
-    group_and_report_failures(instantes_fallidos)
+    group_and_report_failures(instantes_fallidos, verbose=args.verbose)
 
     if instantes_validos:
         logger.info(f"\nSe encontraron datos completos para {len(instantes_validos)} instantes.")
@@ -1385,6 +1385,6 @@ if __name__ == "__main__":
 
     # Mostrar estadísticas finales
     logger.info("\n--- Procesamiento completado. ---")
-    logger.info(f"Momentos procesados exitosamente: {instantes_exitosos} de {len(instantes_validos)}")
+    logger.info(f"Instantes procesados exitosamente: {instantes_exitosos} de {len(instantes_validos)}")
     if instantes_fallidos > 0:
-        logger.info(f"Momentos fallidos: {instantes_fallidos}")
+        logger.info(f"Instantes fallidos: {instantes_fallidos}")
