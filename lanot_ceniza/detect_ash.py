@@ -944,6 +944,15 @@ def main(data_path, moment, output_path, clip_region=None, create_png=False, use
     ) as dst:
         dst.write_colormap(1, color_table)
         dst.write(data_to_save, 1)
+        # El tag ColorMap de TIFF sólo almacena R,G,B (no alfa), por lo que el
+        # alfa=0 definido en color_table para los valores 0 y 255 no se persiste.
+        # Escribimos una banda de máscara interna para que los píxeles con esos
+        # valores se interpreten como transparentes por las herramientas GIS.
+        # Convención GDAL: 0 = enmascarado/transparente, 255 = válido/opaco.
+        mask = np.where(
+            (data_to_save == 0) | (data_to_save == 255), 0, 255
+        ).astype(np.uint8)
+        dst.write_mask(mask)
     
     print(f"¡Archivo GeoTIFF guardado con éxito (formato 1 banda con colormap)!")
     print(f"Ruta: {Path(output_path).resolve()}")
