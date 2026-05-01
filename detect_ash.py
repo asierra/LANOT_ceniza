@@ -30,6 +30,18 @@ CLIP_REGIONS = {
     'ashpaper': [-102.418,22.474,-96.294,17.547],
 }
 
+# Paleta de colores para clasificación de ceniza (RGB)
+# El valor 0 se remapea a 255 (NoData) antes de guardar el GeoTIFF
+ASH_COLORS = {
+    0: (0, 0, 0),       # clear - negro
+    1: (255, 0, 0),     # ash - rojo
+    2: (255, 165, 0),   # probable - naranja
+    3: (255, 255, 0),   # posible - amarillo
+    4: (0, 255, 0),     # cloud - verde
+    5: (0, 0, 255),     # noise - azul
+    255: (0, 0, 0)      # nodata / clear remapped - negro
+}
+
 # Generar versiones "geo" de las regiones automáticamente
 CLIP_REGIONS_WITH_GEO = CLIP_REGIONS.copy()
 for region_name, bbox in CLIP_REGIONS.items():
@@ -592,15 +604,7 @@ def create_color_png(data_array, output_path, color_table_path=None, bounds=None
     Returns:
         None
     """
-    # Paleta de colores por defecto basada en ash.cpt
-    default_colors = {
-        0: (0, 0, 0),       # clear - negro
-        1: (255, 0, 0),     # ash - rojo
-        2: (255, 165, 0),   # probable - naranja
-        3: (255, 255, 0),   # baja probable - amarillo
-        4: (0, 255, 0),     # cloud - verde
-        5: (0, 0, 255)      # noise - azul
-    }
+    default_colors = ASH_COLORS.copy()
     
     # Si se proporciona un archivo .cpt, intentar leerlo
     if color_table_path:
@@ -1118,19 +1122,16 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
 
     logger.debug(f"\nGuardando resultado en: {output_path}")
     
-    # Definir tabla de colores (hardcoded desde ash.cpt)
-    color_table = {
-        0: (0, 0, 0, 0),           # clear - transparente (sin ceniza detectada)
-        1: (255, 0, 0, 255),       # ash - rojo
-        2: (255, 165, 0, 255),     # probable - naranja
-        3: (255, 255, 0, 255),     # less probable - amarillo
-        4: (0, 255, 0, 255),       # cloud - verde
-        5: (0, 0, 255, 255),       # noise - azul
-        255: (0, 0, 0, 0)          # nodata - transparente (sin datos válidos)
-    }
-    
     # Usar los datos del output_da (que pueden estar reproyectados)
     data_to_save = output_da.values.astype(np.uint8)
+    
+    # Todo lo que era 0 (sin detección) ahora será 255 (NoData)
+    data_to_save[data_to_save == 0] = 255
+
+    # Generar tabla de colores (RGBA) para el GeoTIFF
+    # Categorías 1-5 son opacas. 255 (NoData) es transparente.
+    color_table = {val: (*rgb, 255 if val != 255 else 0) for val, rgb in ASH_COLORS.items()}
+
     height, width = data_to_save.shape
     
     # Guardar como GeoTIFF de 1 banda con colormap incrustado
@@ -1204,7 +1205,7 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
                 print("  El PNG se generará sin mapa base.")
         
         create_color_png(
-            output_da.data, 
+            data_to_save, 
             png_path, 
             cpt_path if cpt_path.exists() else None,
             bounds=png_bounds,
