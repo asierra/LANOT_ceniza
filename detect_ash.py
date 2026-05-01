@@ -13,8 +13,6 @@ from skyfield.api import Topos, load
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
 import os
-from PIL import Image
-from mapdrawer import MapDrawer
 
 # Configurar logger
 logger = logging.getLogger(__name__)
@@ -583,146 +581,9 @@ def genera_media_dst(arreglo, kernel_size=5, n_jobs=None):
     return kernel_media, kernel_std
 
 
-def create_color_png(data_array, output_path, color_table_path=None, bounds=None, timestamp=None, lanot_dir='/usr/local/share/lanot', crs=None):
-    """
-    Crea una imagen PNG a color a partir del array de clasificación de ceniza,
-    con mapa base dibujado usando MapDrawer.
-    
-    Args:
-        data_array (np.ndarray): Array 2D con valores de clasificación (0-5)
-        output_path (Path or str): Ruta del archivo PNG de salida
-        color_table_path (Path or str, optional): Ruta al archivo .cpt con la paleta de colores.
-                                                   Por defecto usa ash.cpt en el mismo directorio.
-        bounds (tuple, optional): Límites geográficos (lon_min, lat_max, lon_max, lat_min) en WGS84.
-                                  Si se proporciona, dibuja líneas costeras y logo.
-        timestamp (datetime, optional): Fecha/hora de la imagen para mostrar en el PNG.
-        lanot_dir (str): Directorio base de recursos LANOT (shapefiles, logos)
-        crs (str or CRS, optional): Sistema de coordenadas de la imagen. Si es None o 'EPSG:4326',
-                                    usa proyección lineal. Si es otra proyección (ej: GOES), 
-                                    MapDrawer reproyectará las capas correctamente.
-    
-    Returns:
-        None
-    """
-    default_colors = ASH_COLORS.copy()
-    
-    # Si se proporciona un archivo .cpt, intentar leerlo
-    if color_table_path:
-        try:
-            colors = {}
-            with open(color_table_path, 'r') as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith('#') and not line.startswith('B') and not line.startswith('F') and not line.startswith('N'):
-                        parts = line.split(';')[0].split()
-                        if len(parts) >= 4:
-                            value = int(parts[0])
-                            r, g, b = int(parts[1]), int(parts[2]), int(parts[3])
-                            colors[value] = (r, g, b)
-            if colors:
-                default_colors.update(colors)
-                logger.debug(f"Paleta de colores cargada desde: {color_table_path}")
-        except Exception as e:
-            print(f"Advertencia: No se pudo leer {color_table_path}, usando paleta por defecto. Error: {e}")
-    
-    # Crear arrays RGB
-    height, width = data_array.shape
-    rgb_array = np.zeros((height, width, 3), dtype=np.uint8)
-    
-    # Aplicar colores según el valor de clasificación
-    for value, color in default_colors.items():
-        mask = (data_array == value)
-        rgb_array[mask] = color
-    
-    # Crear imagen PIL
-    img = Image.fromarray(rgb_array, mode='RGB')
-    
-    # Si se proporcionan límites geográficos, usar MapDrawer para dibujar mapa
-    if bounds is not None:
-        try:
-            lon_min, lat_max, lon_max, lat_min = bounds
-            
-            # Determinar si necesitamos usar proyección o modo lineal
-            # Si la imagen está en EPSG:4326 o no tiene CRS, usar modo lineal (None)
-            # Si está en otra proyección (ej: GOES), convertir a clave corta si es posible
-            target_crs = None
-            if crs is not None:
-                crs_str = crs.to_string() if hasattr(crs, 'to_string') else str(crs)
-                if crs_str != 'EPSG:4326':
-                    # Intentar detectar si es una proyección GOES y usar clave corta
-                    proj4_str = crs.to_proj4() if hasattr(crs, 'to_proj4') else crs_str
-                    
-                    # Detectar GOES-16 (lon_0=-75)
-                    if 'geos' in proj4_str.lower() and 'lon_0=-75' in proj4_str:
-                        target_crs = 'goes16'
-                    # Detectar GOES-17/18 (lon_0=-137)
-                    elif 'geos' in proj4_str.lower() and 'lon_0=-137' in proj4_str:
-                        target_crs = 'goes18'  # Usar goes18 como default para -137
-                    else:
-                        # Usar el CRS completo si no es GOES o no se reconoce
-                        target_crs = crs_str
-            
-            # Inicializar MapDrawer
-            mapper = MapDrawer(lanot_dir=lanot_dir, target_crs=target_crs)
-            mapper.set_image(img)
-            mapper.set_bounds(lon_min, lat_max, lon_max, lat_min)
-            
-            # Selección de capas según tamaño del dominio: si es local (span pequeño) solo MEXSTATES
-            lon_span = abs(lon_max - lon_min)
-            lat_span = abs(lat_max - lat_min)
-            if lon_span < 20 and lat_span < 20:
-                layer_selection = ("MEXSTATES",)
-                logger.debug("Dominio local detectado; dibujando solo capa MEXSTATES.")
-            else:
-                layer_selection = ("COASTLINE", "COUNTRIES", "MEXSTATES")
-                logger.debug("Dominio amplio; dibujando capas COASTLINE, COUNTRIES y MEXSTATES.")
-            for layer_key in layer_selection:
-                try:
-                    mapper.draw_layer(layer_key, color='white', width=0.5)
-                except Exception as e:
-                    print(f"  No se pudo dibujar capa {layer_key}: {e}")
-            
-            # Dibujar logo LANOT
-            try:
-                mapper.draw_logo(logosize=128, position=1)  # Upper-right
-            except Exception as e:
-                print(f"  No se pudo dibujar logo: {e}")
-            
-            # Dibujar fecha/hora en esquina inferior izquierda (posición 2)
-            if timestamp is not None:
-                try:
-                    mapper.draw_fecha(timestamp, position=3, fontsize=16, color='yellow')
-                except Exception as e:
-                    print(f"  No se pudo dibujar fecha: {e}")
-            
-            # Dibujar leyenda automática con la paleta actual (solo clases 1–3)
-            try:
-                etiquetas = {
-                    1: 'Ash',
-                    2: 'Probable Ash',
-                    3: 'Possible Ash',
-                }
-                # Solo mostramos clases 1–3 en la leyenda
-                orden = [1, 2, 3]
-                items = [(etiquetas[v], default_colors[v]) for v in orden if v in default_colors]
-                # Colocar la leyenda encima de la fecha (fecha: position=2),
-                # aplicando un desplazamiento vertical sencillo.
-                mapper.draw_legend(items=items, position=2, fontsize=14, border_color='black') #, vertical_offset=40)
-            except Exception as e:
-                print(f"  No se pudo dibujar la leyenda: {e}")
-                
-        except Exception as e:
-            print(f"Advertencia: No se pudo usar MapDrawer para decorar el mapa: {e}")
-            print("  Se guardará solo la imagen de clasificación.")
-    
-    # Guardar imagen
-    img.save(output_path)
-    logger.info(f"Imagen PNG guardada en: {output_path}")
-
-
-def main(data_path, moment_info, output_path, clip_region=None, create_png=False, use_date_tree=False, eph=None, ts=None):
-    """Función principal para ejecutar el proceso de detección de cenizas."""
-    logger.debug(f"Iniciando detección para el instante: {moment_info[0]}")
+def process_instant(data_path, instant_info, output_path, clip_region=None, use_date_tree=False, eph=None, ts=None):
+    """Procesa un instante: lee los datos GOES L2, clasifica ceniza y guarda el GeoTIFF."""
+    logger.debug(f"Iniciando detección para el instante: {instant_info[0]}")
     
     # Validar y obtener los límites de la región de recorte si se especificó
     reproject_to_geo = False
@@ -750,12 +611,12 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
     # NOTA: El archivo NAV ya no es necesario, se calculan lat/lon desde la proyección
     productos = ["ACTP", "C04", "C07", "C11", "C13", "C14", "C15"]
     
-    archivos = get_filelist_from_path(data_path, moment_info, productos, use_date_tree=use_date_tree)
+    archivos = get_filelist_from_path(data_path, instant_info, productos, use_date_tree=use_date_tree)
     if not archivos:
-        print(f"Error: No se encontró ningún archivo con este instante {moment_info[0]}.")
+        print(f"Error: No se encontró ningún archivo con este instante {instant_info[0]}.")
         return
     if len(archivos) != len(productos):
-        print(f"Error: Se encontraron {len(archivos)} archivos, pero se esperaban {len(productos)}. (Momento: {moment_info[0]})")
+        print(f"Error: Se encontraron {len(archivos)} archivos, pero se esperaban {len(productos)}. (Instante: {instant_info[0]})")
         return
     
     logger.debug(f"Se encontraron los {len(archivos)} archivos requeridos.")
@@ -1128,9 +989,8 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
     # Todo lo que era 0 (sin detección) ahora será 255 (NoData)
     data_to_save[data_to_save == 0] = 255
 
-    # Generar tabla de colores (RGBA) para el GeoTIFF
-    # Categorías 1-5 son opacas. 255 (NoData) es transparente.
-    color_table = {val: (*rgb, 255 if val != 255 else 0) for val, rgb in ASH_COLORS.items()}
+    # Generar tabla de colores (RGB) para el GeoTIFF
+    color_table = {val: rgb for val, rgb in ASH_COLORS.items()}
 
     height, width = data_to_save.shape
     
@@ -1159,61 +1019,8 @@ def main(data_path, moment_info, output_path, clip_region=None, create_png=False
     
     print(f"¡Archivo GeoTIFF guardado con éxito (formato 1 banda con colormap)!")
     print(f"Ruta: {Path(output_path).resolve()}")
-    
-    # Crear imagen PNG a color si se solicita
-    if create_png:
-        # Determinar la ruta del archivo PNG
-        png_path = Path(str(output_path).replace('.tif', '.png'))
-        
-        # Buscar el archivo ash.cpt en el directorio del script
-        script_dir = Path(__file__).parent
-        cpt_path = script_dir / 'ash.cpt'
-        
-        print("\n--- Generando imagen PNG a color ---")
-        
-        # Calcular los límites geográficos del DataArray
-        # Si está reproyectado a EPSG:4326, usar las coordenadas directamente
-        # Si está en proyección GOES, necesitamos convertir las esquinas
-        png_bounds = None
-        
-        if output_da.rio.crs is not None:
-            try:
-                # Obtener los límites del raster
-                bounds_array = output_da.rio.bounds()
-                # bounds_array es (left, bottom, right, top)
-                # Necesitamos convertirlo a (lon_min, lat_max, lon_max, lat_min)
-                
-                if output_da.rio.crs.to_string() == "EPSG:4326":
-                    # Ya está en coordenadas geográficas
-                    png_bounds = (bounds_array[0], bounds_array[3], bounds_array[2], bounds_array[1])
-                else:
-                    # Para otras proyecciones (ej: GOES), transformar las esquinas a EPSG:4326
-                    # MapDrawer se encargará de manejar correctamente la proyección
-                    from pyproj import Transformer
-                    transformer = Transformer.from_crs(output_da.rio.crs, "EPSG:4326", always_xy=True)
-                    
-                    # Transformar las esquinas para obtener límites aproximados
-                    lon_min, lat_min = transformer.transform(bounds_array[0], bounds_array[1])
-                    lon_max, lat_max = transformer.transform(bounds_array[2], bounds_array[3])
-                    
-                    png_bounds = (lon_min, lat_max, lon_max, lat_min)
-                
-                print(f"Límites geográficos del PNG: lon [{png_bounds[0]:.2f}, {png_bounds[2]:.2f}], lat [{png_bounds[3]:.2f}, {png_bounds[1]:.2f}]")
-                
-            except Exception as e:
-                print(f"Advertencia: No se pudieron calcular límites geográficos: {e}")
-                print("  El PNG se generará sin mapa base.")
-        
-        create_color_png(
-            data_to_save, 
-            png_path, 
-            cpt_path if cpt_path.exists() else None,
-            bounds=png_bounds,
-            timestamp=image_time_dt,
-            crs=output_da.rio.crs
-        )
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Detecta ceniza volcánica a partir de datos GOES L2.")
     parser.add_argument('-p', '--path', type=Path, default=l2_path, 
                         help=f"Ruta al directorio de datos L2. Por defecto: {l2_path}")
@@ -1226,8 +1033,6 @@ if __name__ == "__main__":
                              "Por defecto: './ceniza_[instante].tif'")
     parser.add_argument('-c', '--clip', type=str, choices=list(CLIP_REGIONS_WITH_GEO.keys()), default=None, 
                         help=f"Región para recortar el resultado final. Agrega 'geo' al final para reproyectar a lat/lon. Opciones: {', '.join(CLIP_REGIONS.keys())} (o con sufijo 'geo')")
-    parser.add_argument('--png', action='store_true', 
-                        help="Genera también una imagen PNG a color con la misma resolución que el GeoTIFF")
     parser.add_argument('--date-tree', action='store_true', 
                         help="Usa estructura de directorios YYYY/MM/DD dentro de --path para localizar los archivos según el instante especificado")
     parser.add_argument('--dry-run', action='store_true',
@@ -1246,27 +1051,26 @@ if __name__ == "__main__":
     # --- 1. Determinar la lista de instantes a procesar ---
     if args.instant:
         try:
-            moment_list = parse_moment_string(args.instant)
+            instant_list = parse_moment_string(args.instant)
         except ValueError as e:
             print(f"Error: {e}")
             exit(1)
     else:
-        # Obtiene el instante más reciente en formato 'YYYYjjjHHMM'
-        moment_list = [normalize_moment(get_moment())]
+        instant_list = [normalize_moment(get_moment())]
 
     # --- 1b. Detectar y aplicar desfase de minutos GOES ---
     # Los archivos GOES-CONUS no siempre empiezan en minutos múltiplos de 5;
     # pueden tener un offset de +1 o +2 min (:01/:06 o :02/:07). Se detecta
     # automáticamente a partir del primer instante del rango.
-    if len(moment_list) > 1:
-        offset = detect_goes_minute_offset(args.path, moment_list[0], use_date_tree=args.date_tree)
+    if len(instant_list) > 1:
+        offset = detect_goes_minute_offset(args.path, instant_list[0], use_date_tree=args.date_tree)
         if offset != 0:
             adjusted = []
-            for (moment_julian, _y, _mo, _d) in moment_list:
-                dt = datetime.datetime.strptime(moment_julian, "%Y%j%H%M") + datetime.timedelta(minutes=offset)
+            for (instant_julian, _y, _mo, _d) in instant_list:
+                dt = datetime.datetime.strptime(instant_julian, "%Y%j%H%M") + datetime.timedelta(minutes=offset)
                 new_julian = f"{dt.strftime('%Y')}{dt.strftime('%j')}{dt.strftime('%H%M')}"
                 adjusted.append((new_julian, dt.strftime('%Y'), dt.strftime('%m'), dt.strftime('%d')))
-            moment_list = adjusted
+            instant_list = adjusted
 
     # --- 2. Verificación de archivos (Pre-flight check) ---
     print("\n--- Verificando disponibilidad de archivos ---")
@@ -1274,21 +1078,17 @@ if __name__ == "__main__":
     instantes_validos = []
     instantes_fallidos = []
 
-    for moment_info in moment_list:
-        files = get_filelist_from_path(args.path, moment_info, productos_requeridos, use_date_tree=args.date_tree, verbose=args.verbose)
+    for instant_info in instant_list:
+        files = get_filelist_from_path(args.path, instant_info, productos_requeridos, use_date_tree=args.date_tree, verbose=args.verbose)
         if len(files) == len(productos_requeridos):
-            instantes_validos.append(moment_info)
+            instantes_validos.append(instant_info)
         else:
-            # Desempaquetar la información del instante para mostrar la ruta buscada
-            moment_julian, year, month, day = moment_info
-            
-            # Determinar la ruta de búsqueda real
+            instant_julian, year, month, day = instant_info
             if args.date_tree:
                 search_path = args.path / year / month / day
             else:
                 search_path = args.path
-                
-            instantes_fallidos.append((moment_julian, search_path)) # Guardamos el instante y la ruta buscada para el reporte
+            instantes_fallidos.append((instant_julian, search_path))
 
     # --- 3. Reportar resultados de la verificación ---
     group_and_report_failures(instantes_fallidos, verbose=args.verbose)
@@ -1314,71 +1114,60 @@ if __name__ == "__main__":
     
     # Contadores para estadísticas
     instantes_exitosos = 0
-    instantes_fallidos = 0
+    instantes_con_error = 0
     
-    for i, moment_info in enumerate(instantes_validos):
-        moment_a_procesar = moment_info[0]
-        logger.info(f"\n[{i+1}/{len(instantes_validos)}] Procesando instante: {moment_a_procesar}")
+    for i, instant_info in enumerate(instantes_validos):
+        instant_str = instant_info[0]
+        logger.info(f"\n[{i+1}/{len(instantes_validos)}] Procesando instante: {instant_str}")
         
         # Generar nombre de archivo de salida para cada instante
         if args.output:
             outp = str(args.output)
             output_path = Path(outp)
             
-            # Determinar si es un directorio o un archivo:
-            # 1. Si termina en path separator -> directorio explícito
-            # 2. Si existe y es directorio -> directorio
-            # 3. Si no existe pero no tiene extensión .tif/.png -> asumimos directorio
-            # 4. En otro caso -> archivo único
-            
             is_directory = (
                 outp.endswith(os.path.sep) or
                 output_path.is_dir() or
-                (not output_path.exists() and not outp.endswith('.tif') and not outp.endswith('.png'))
+                (not output_path.exists() and not outp.endswith('.tif'))
             )
             
             if is_directory:
-                # Tratarlo como directorio
                 output_dir = output_path
                 try:
                     output_dir.mkdir(parents=True, exist_ok=True)
                 except Exception as e:
                     print(f"Error creando el directorio de salida '{output_dir}': {e}")
                     raise
-                
-                # Generar nombre de archivo según instante y región
                 if args.clip and args.clip.endswith('geo'):
-                    filename = f"ceniza_{moment_a_procesar}_geo.tif"
+                    filename = f"ceniza_{instant_str}_geo.tif"
                 else:
-                    filename = f"ceniza_{moment_a_procesar}.tif"
+                    filename = f"ceniza_{instant_str}.tif"
                 output_file = output_dir / filename
             else:
-                # Tratarlo como archivo único
                 if i > 0:
                     print("Advertencia: Se especificó un único archivo de salida para un rango. Solo se procesará el primer instante válido.")
                     break
                 output_file = output_path
         else:
             if args.clip and args.clip.endswith('geo'):
-                output_file = Path(f"./ceniza_{moment_a_procesar}_geo.tif")
+                output_file = Path(f"./ceniza_{instant_str}_geo.tif")
             else:
-                output_file = Path(f"./ceniza_{moment_a_procesar}.tif")
+                output_file = Path(f"./ceniza_{instant_str}.tif")
 
         try:
-            main(
-                data_path=args.path, 
-                moment_info=moment_info, 
-                output_path=output_file, 
-                clip_region=args.clip, 
-                create_png=args.png, 
+            process_instant(
+                data_path=args.path,
+                instant_info=instant_info,
+                output_path=output_file,
+                clip_region=args.clip,
                 use_date_tree=args.date_tree,
                 eph=eph_global,
                 ts=ts_global
             )
             instantes_exitosos += 1
         except Exception as e:
-            instantes_fallidos += 1
-            logger.error(f"\n*** Error procesando instante {moment_a_procesar}: {e}")
+            instantes_con_error += 1
+            logger.error(f"\n*** Error procesando instante {instant_str}: {e}")
             logger.debug("Continuando con el siguiente instante...")
             import traceback
             traceback.print_exc()
@@ -1387,5 +1176,8 @@ if __name__ == "__main__":
     # Mostrar estadísticas finales
     logger.info("\n--- Procesamiento completado. ---")
     logger.info(f"Instantes procesados exitosamente: {instantes_exitosos} de {len(instantes_validos)}")
-    if instantes_fallidos > 0:
-        logger.info(f"Instantes fallidos: {instantes_fallidos}")
+    if instantes_con_error > 0:
+        logger.info(f"Instantes con error: {instantes_con_error}")
+
+if __name__ == "__main__":
+    main()

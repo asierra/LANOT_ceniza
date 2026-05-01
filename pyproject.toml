@@ -24,9 +24,6 @@ dependencies = [
   "netcdf4",
   "pyproj",
   "python-dateutil",
-  "Pillow",
-  "aggdraw",
-  "pyshp",
   "matplotlib",
 ]
 
@@ -35,5 +32,9 @@ Repository = "https://github.com/asierra/LANOT_ceniza"
 Issues = "https://github.com/asierra/LANOT_ceniza/issues"
 
 [project.scripts]
-lanot-detect-ash = "lanot_ceniza._bridge_detect_ash:detect_ash_main"
-lanot-draw-map = "lanot_ceniza._bridge_mapdrawer:draw_map_main"
+lanot-detect-ash = "detect_ash:main"
+lanot-compare-ash = "compare_ash:main"
+
+[tool.hatch.build.targets.wheel]
+packages = []
+include = ["detect_ash.py", "compare_ash.py"]

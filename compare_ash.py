@@ -202,7 +202,7 @@ def analizar_y_visualizar(ref_path, test_path, output_png):
     plt.savefig(output_png, dpi=150)
     print("¡Proceso finalizado con éxito!")
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Compara resultados de detección de ceniza: TeraScan (Legacy) vs Python (New).")
     parser.add_argument('ref', type=Path, help="Archivo TeraScan (Referencia)")
     parser.add_argument('test', type=Path, help="Archivo Python (Test)")
@@ -216,4 +216,6 @@ if __name__ == "__main__":
 
     out_name = args.output if args.output else Path(f"comp_{args.test.stem}.png")
     analizar_y_visualizar(args.ref, args.test, out_name)
-    
+
+if __name__ == "__main__":
+    main()
