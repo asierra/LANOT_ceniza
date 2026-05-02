@@ -28,7 +28,7 @@ El sistema utiliza múltiples canales infrarrojos y productos derivados para:
 
 ### Requisitos previos
 
-- Python 3.8 o superior
+- Python 3.10 o superior
 - pip (gestor de paquetes de Python)
 
 ### Configuración del ambiente
@@ -56,10 +56,15 @@ El sistema utiliza múltiples canales infrarrojos y productos derivados para:
    .venv\Scripts\activate
    ```
 
-4. **Instalar las dependencias:**
+4. **Instalar el paquete:**
    ```bash
-   pip install -r requirements.txt
+   pip install .
    ```
+
+   > Para desarrollo (los cambios al código se reflejan sin reinstalar):
+   > ```bash
+   > pip install -e .
+   > ```
 
 ### Dependencias principales
 
@@ -76,61 +81,42 @@ El sistema utiliza múltiples canales infrarrojos y productos derivados para:
 - **aggdraw**: Dibujo de vectores de alta calidad sobre imágenes PNG
 - **pyshp**: Lectura de archivos shapefile para mapas base
 
-### Instalación de MapDrawer (CLI)
-
-Para utilizar la herramienta de dibujo de mapas `mapdrawer.py` como un comando del sistema (`mapdrawer`), sigue estos pasos:
-
-1. **Hacer ejecutable el script:**
-   ```bash
-   chmod +x mapdrawer.py
-   ```
-
-2. **Crear un enlace simbólico (requiere permisos de administrador):**
-   ```bash
-   sudo ln -s $(pwd)/mapdrawer.py /usr/local/bin/mapdrawer
-   ```
-
-3. **Verificar la instalación:**
-   ```bash
-   mapdrawer --help
-   ```
-
 ## Uso
 
-### Detección de Ceniza (detect_ash.py)
+### Detección de Ceniza (`lanot-detect-ash`)
 
 ### Ejecución básica
 
 Procesar el instante más reciente automáticamente:
 
 ```bash
-./detect_ash.py
+lanot-detect-ash
 ```
 
 Procesar un instante específico:
 
 ```bash
-./detect_ash.py --path /data/ceniza/2019/spring --moment 20191001731
+lanot-detect-ash --path /data/ceniza/2019/spring --instant 20191001731
 ```
 
 Especificar archivo o directorio de salida:
 
 ```bash
 # Nombre de archivo específico
-./detect_ash.py --moment 20191001731 --output resultado_ceniza.tif
+lanot-detect-ash --instant 20191001731 --output resultado_ceniza.tif
 
 # Directorio (genera nombre automático: ceniza_20191001731.tif)
-./detect_ash.py --moment 20191001731 --output /data/resultados/
+lanot-detect-ash --instant 20191001731 --output /data/resultados/
 
 # Con reproyección, el sufijo _geo se agrega automáticamente
-./detect_ash.py --moment 20191001731 --clip popocatepetlgeo --output /data/resultados/
+lanot-detect-ash --instant 20191001731 --clip popocatepetlgeo --output /data/resultados/
 # Genera: /data/resultados/ceniza_20191001731_geo.tif
 ```
 
 ### Parámetros de línea de comandos
 
 - `--path`: Ruta al directorio que contiene los archivos NetCDF L2 (por defecto: `/data/ceniza/2019/spring`)
-- `--moment`: Momento a procesar en formato `YYYYjjjHHMM` (año, día juliano, hora y minuto). Si no se especifica, se calcula automáticamente el más reciente
+- `--instant`: Instante a procesar en formato `YYYYjjjHHMM` (año, día juliano, hora y minuto). Si no se especifica, se calcula automáticamente el más reciente
 - `--output`: Ruta de salida para el GeoTIFF. Puede ser:
   - **Un archivo**: `resultado.tif` - Guarda con ese nombre
   - **Un directorio**: `/data/salida/` - Genera automáticamente `ceniza_[instante].tif` (o con sufijo `_geo` si se reproyecta)
@@ -146,31 +132,31 @@ Especificar archivo o directorio de salida:
 
 **Procesamiento completo sin recorte:**
 ```bash
-./detect_ash.py --path /data/ceniza/2019/spring --moment 20190871402
+lanot-detect-ash --path /data/ceniza/2019/spring --instant 20190871402
 ```
 
 **Generar también imagen PNG a color:**
 ```bash
-./detect_ash.py --moment 20190871402 --png
+lanot-detect-ash --instant 20190871402 --png
 ```
 
 **Recorte a región específica (proyección GOES):**
 ```bash
-./detect_ash.py --moment 20190871402 --clip centromex
-./detect_ash.py --moment 20190871402 --clip popocatepetl --png
+lanot-detect-ash --instant 20190871402 --clip centromex
+lanot-detect-ash --instant 20190871402 --clip popocatepetl --png
 ```
 
 **Recorte con reproyección a coordenadas geográficas:**
 ```bash
-./detect_ash.py --moment 20190871402 --clip centromexgeo --png
-./detect_ash.py --moment 20190871402 --clip popocatepetlgeo --output /data/salida/ --png
+lanot-detect-ash --instant 20190871402 --clip centromexgeo --png
+lanot-detect-ash --instant 20190871402 --clip popocatepetlgeo --output /data/salida/ --png
 ```
 
 **Guardar múltiples archivos en un directorio:**
 ```bash
 # El directorio puede especificarse solo una vez
-./detect_ash.py --moment 20190871402 --output /data/procesados/ --png
-./detect_ash.py --moment 20190871506 --output /data/procesados/ --png
+lanot-detect-ash --instant 20190871402 --output /data/procesados/ --png
+lanot-detect-ash --instant 20190871506 --output /data/procesados/ --png
 # Genera: ceniza_20190871402.tif, ceniza_20190871402.png, ceniza_20190871506.tif, etc.
 ```
 
@@ -235,52 +221,39 @@ Cuando se usa reproyección a coordenadas geográficas (opciones que terminan en
 
 ```bash
 # Sin reproyección
-./detect_ash.py --moment 20191001731
+lanot-detect-ash --instant 20191001731
 # Genera: ceniza_20191001731.tif
 
 # Con reproyección
-./detect_ash.py --moment 20191001731 --clip popocatepetlgeo
+lanot-detect-ash --instant 20191001731 --clip popocatepetlgeo
 # Genera: ceniza_20191001731_geo.tif
 
 # Con PNG
-./detect_ash.py --moment 20191001731 --clip popocatepetlgeo --png
+lanot-detect-ash --instant 20191001731 --clip popocatepetlgeo --png
 # Genera: ceniza_20191001731_geo.tif y ceniza_20191001731_geo.png
 ```
 
-### Dibujado de Mapas (mapdrawer)
+### Comparación de resultados (`lanot-compare-ash`)
 
-La herramienta `mapdrawer` permite dibujar mapas base, logos, fechas y leyendas sobre imágenes existentes desde la línea de comandos.
+Permite comparar visualmente dos archivos GeoTIFF de clasificación (p. ej., resultado de TeraScan vs. el de este paquete) y genera una imagen PNG con matrices de confusión y estadísticas.
 
 #### Ejecución básica
 
 ```bash
-mapdrawer imagen_entrada.png --output imagen_salida.png --crs goes16 --recorte centromex
+lanot-compare-ash referencia.tif resultado.tif
 ```
 
-#### Parámetros principales
+#### Parámetros
 
-- `input_image`: Ruta de la imagen de entrada (obligatorio).
-- `--output`: Ruta de salida (opcional, por defecto sobreescribe).
-- `--crs`: Sistema de coordenadas de la imagen. Soporta claves cortas (`goes16`, `goes17`, `goes18`) o códigos EPSG (`epsg:4326`).
-- `--bounds`: Límites geográficos manuales (ulx uly lrx lry).
-- `--recorte`: Nombre de un recorte predefinido (ej: `centromex`, `Mexico`).
-- `--layer`: Capa a dibujar en formato `NOMBRE:COLOR:GROSOR`. Se puede repetir.
-  - Ej: `--layer COASTLINE:cyan:0.5 --layer MEXSTATES:white:1.0`
-- `--logo-pos`: Posición del logo (0-3).
-- `--timestamp`: Texto de fecha/hora.
-- `--cpt`: Archivo de paleta de colores para generar leyenda.
+- `ref`: Archivo GeoTIFF de referencia (ej. salida TeraScan).
+- `test`: Archivo GeoTIFF a evaluar.
+- `--output` / `-o`: Nombre del PNG de salida (por defecto: `comp_<nombre_test>.png`).
 
-#### Ejemplo completo
+#### Ejemplo
 
 ```bash
-mapdrawer ceniza.png \
-  --crs goes16 \
-  --recorte centromex \
-  --layer COASTLINE:cyan:0.5 \
-  --layer MEXSTATES:white:1.0 \
-  --logo-pos 1 \
-  --timestamp "2023/11/23 12:00 UTC" \
-  --cpt ash.cpt
+lanot-compare-ash ceniza_20190871402_terascan.tif ceniza_20190871402.tif \
+  --output comparacion.png
 ```
 
 ## Estructura del proyecto
@@ -288,17 +261,17 @@ mapdrawer ceniza.png \
 ```
 LANOT_ceniza/
 ├── detect_ash.py       # Script principal de detección
-├── mapdrawer.py        # Módulo para dibujar mapas base en PNG
+├── compare_ash.py      # Script de comparación con resultados de referencia
+├── pyproject.toml      # Configuración del paquete instalable
 ├── requirements.txt    # Dependencias del proyecto
 ├── ash.cpt             # Paleta de colores para clasificación
-├── de421.bsp          # Efemérides planetarias (descargado automáticamente)
 ├── README.md          # Este archivo
 └── LICENSE            # Licencia del proyecto
 ```
 
-### Recursos adicionales para MapDrawer (opcional)
+### Recursos adicionales para PNG con mapa base (opcional)
 
-Para generar imágenes PNG con mapa base, se requiere la siguiente estructura en `/usr/local/share/lanot`:
+Para generar imágenes PNG con mapa base (opción `--png`), se requiere la siguiente estructura en `/usr/local/share/lanot`:
 
 ```
 /usr/local/share/lanot/
@@ -398,7 +371,7 @@ Este enfoque minimiza el uso de memoria y acelera significativamente el procesam
 - El script determina automáticamente el instante más reciente según la cadencia del dominio:
   - **CONUS**: Minutos terminados en 1 o 6 (ej: 01, 06, 11, 16, 21, 26, 31, 36, 41, 46, 51, 56)
   - **Full Disk**: Múltiplos de 10 (ej: 00, 10, 20, 30, 40, 50)
-- Los archivos de efemérides (de421.bsp) se descargan automáticamente por Skyfield la primera vez
+- Los archivos de efémerides (`de421.bsp`) se descargan automáticamente por Skyfield la primera vez y se almacenan en `/usr/local/share/lanot/skyfield/` (el directorio se crea automáticamente)
 - El formato de tiempo en nombres de archivo es `YYYYjjjHHMM` (año, día juliano, hora y minuto UTC)
 - El procesamiento usa `np.select()` para clasificaciones eficientes y vectorizadas
 - Los filtros espaciales manejan correctamente valores NaN usando métodos optimizados de scipy.ndimage
