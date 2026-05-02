@@ -9,7 +9,7 @@ import numpy as np
 from scipy import ndimage
 from pathlib import Path
 from skyfield.api import utc
-from skyfield.api import Topos, load
+from skyfield.api import Topos, Loader
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
 import os
@@ -581,6 +581,109 @@ def genera_media_dst(arreglo, kernel_size=5, n_jobs=None):
     return kernel_media, kernel_std
 
 
+def classify_ash(c04, c07, c11, c13, c15, phase, sza, valid_data_mask, kernel_size=5) -> np.ndarray:
+    """Clasifica ceniza volcánica a partir de arrays de temperatura de brillo.
+
+    Parámetros
+    ----------
+    c04, c07, c11, c13, c15 : np.ndarray
+        Bandas GOES en temperatura de brillo (K) o reflectancia (c04).
+    phase : np.ndarray
+        Fase de la nube (ACTP).
+    sza : np.ndarray
+        Ángulo cenital solar en grados.
+    valid_data_mask : np.ndarray (bool)
+        Máscara de píxeles con datos válidos.
+    kernel_size : int
+        Tamaño del kernel para el cálculo de textura.
+
+    Retorna
+    -------
+    np.ndarray (uint8)
+        Array de clasificación con nodata=255 aplicado.
+    """
+    # Diferencias de brillo y temperatura (BTD)
+    delta1 = c13 - c15
+    delta2 = c11 - c13
+    delta3 = c07 - c13
+
+    # Máscaras de iluminación
+    mask_noche = sza > 85
+    mask_dia = sza < 70
+    mask_crepusculo = (sza >= 70) & (sza <= 85)
+
+    # Cálculo de textura
+    media, dst = genera_media_dst(delta1, kernel_size=kernel_size)
+
+    # Usando np.select para mayor claridad
+    cond_nhood = [
+        (delta1 < 0) & (delta1 - (media * dst) < -1),
+        (delta1 < 1) & (delta1 - (media * dst) < -1)
+    ]
+    val_nhood = [1, 2]
+    nhood = np.select(cond_nhood, val_nhood, default=0)
+
+    # Clasificación inicial por iluminación
+    # Noche
+    cond_noche = [
+        ((delta1 < 0) & (delta2 > 0) & (delta3 > 2)) | (nhood == 1),
+        ((delta1 < 1) & (delta2 > -0.5) & (delta3 > 2)) | (nhood == 2)
+    ]
+    ceniza_noche = np.select(cond_noche, [1, 2], default=0)
+
+    # Crepúsculo
+    cond_crepusculo = [
+        ((delta1 < 0) & (delta2 > 0) & (delta3 > 2)) | (nhood == 1),
+        ((delta1 < 1) & (delta2 > -0.5) & (delta3 > 2) & (c04 > 0.002) & (c13 < 273.15)) | (nhood == 2)
+    ]
+    ceniza_crepusculo = np.select(cond_crepusculo, [1, 2], default=0)
+
+    # Día
+    cond_dia = [
+        ((delta1 < 0) & (delta2 > 0) & (delta3 > 2)) | (nhood == 1),
+        ((delta1 < 1) & (delta2 > -0.5) & (delta3 > 2) & (c04 > 0.002)) | (nhood == 2)
+    ]
+    ceniza_dia = np.select(cond_dia, [1, 2], default=0)
+
+    # Combinar según la máscara de iluminación
+    ceniza_tiempo = np.select(
+        [mask_noche, mask_crepusculo, mask_dia],
+        [ceniza_noche, ceniza_crepusculo, ceniza_dia],
+        default=0
+    )
+
+    # Refinamiento de umbrales (usando np.select)
+    cond_um1 = [
+        ceniza_tiempo == 1,
+        (ceniza_tiempo == 2) & (delta2 >= -1),
+        (ceniza_tiempo == 2) & (delta2 >= -1.5)
+    ]
+    val_um1 = [1, 2, 3]
+    ceniza_um1 = np.select(cond_um1, val_um1, default=ceniza_tiempo)
+
+    cond_um2 = [
+        (ceniza_um1 <= 2) & (delta3 <= 0),
+        (ceniza_um1 >= 3) & (delta3 <= 1.5)
+    ]
+    ceniza_um2 = np.select(cond_um2, [0, 0], default=ceniza_um1)
+
+    # Clasificación final basada en fase de la nube
+    cond_final = [
+        (ceniza_um2 == 2) & (phase == 1), # Nube de agua
+        (ceniza_um2 == 2) & (phase == 4), # Hielo
+        (ceniza_um2 == 3) & (phase == 1), # Nube de agua
+        (ceniza_um2 == 3) & (phase >= 2)  # Superfría
+    ]
+    val_final = [3, 0, 0, 0]
+    ceniza = np.select(cond_final, val_final, default=ceniza_um2)
+
+    # Marcar píxeles sin datos válidos como 255 (nodata)
+    ceniza = ceniza.astype(np.uint8)
+    ceniza[~valid_data_mask] = 255
+
+    return ceniza
+
+
 def process_instant(data_path, instant_info, output_path, clip_region=None, use_date_tree=False, eph=None, ts=None):
     """Procesa un instante: lee los datos GOES L2, clasifica ceniza y guarda el GeoTIFF."""
     logger.debug(f"Iniciando detección para el instante: {instant_info[0]}")
@@ -826,88 +929,11 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     from dateutil.parser import parse
     image_time_dt = parse(time_coverage_start).replace(tzinfo=utc)
 
-    # Diferencias de brillo y temperatura (BTD)
-    delta1 = c13 - c15
-    delta2 = c11 - c13
-    delta3 = c07 - c13
-
-    logger.debug("Fecha y hora ", image_time_dt.strftime("%Y-%m-%d %H:%M:%S UTC"))
+    logger.debug(f"Fecha y hora {image_time_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     sza = get_sun_zenith_angle(lat, lon, image_time_dt, eph, ts)
 
     # --- Clasificación de ceniza ---
-    # Máscaras de iluminación
-    mask_noche = sza > 85
-    mask_dia = sza < 70
-    mask_crepusculo = (sza >= 70) & (sza <= 85)
-
-    # Cálculo de textura
-    media, dst = genera_media_dst(delta1, kernel_size=5)
-
-    # Usando np.select para mayor claridad
-    cond_nhood = [
-        (delta1 < 0) & (delta1 - (media * dst) < -1),
-        (delta1 < 1) & (delta1 - (media * dst) < -1)
-    ]
-    val_nhood = [1, 2]
-    nhood = np.select(cond_nhood, val_nhood, default=0)
-
-    # Clasificación inicial por iluminación
-    # Noche
-    cond_noche = [
-        ((delta1 < 0) & (delta2 > 0) & (delta3 > 2)) | (nhood == 1),
-        ((delta1 < 1) & (delta2 > -0.5) & (delta3 > 2)) | (nhood == 2)
-    ]
-    ceniza_noche = np.select(cond_noche, [1, 2], default=0)
-
-    # Crepúsculo
-    cond_crepusculo = [
-        ((delta1 < 0) & (delta2 > 0) & (delta3 > 2)) | (nhood == 1),
-        ((delta1 < 1) & (delta2 > -0.5) & (delta3 > 2) & (c04 > 0.002) & (c13 < 273.15)) | (nhood == 2)
-    ]
-    ceniza_crepusculo = np.select(cond_crepusculo, [1, 2], default=0)
-
-    # Día
-    cond_dia = [
-        ((delta1 < 0) & (delta2 > 0) & (delta3 > 2)) | (nhood == 1),
-        ((delta1 < 1) & (delta2 > -0.5) & (delta3 > 2) & (c04 > 0.002)) | (nhood == 2)
-    ]
-    ceniza_dia = np.select(cond_dia, [1, 2], default=0)
-
-    # Combinar según la máscara de iluminación
-    ceniza_tiempo = np.select(
-        [mask_noche, mask_crepusculo, mask_dia],
-        [ceniza_noche, ceniza_crepusculo, ceniza_dia],
-        default=0
-    )
-
-    # Refinamiento de umbrales (usando np.select)
-    cond_um1 = [
-        ceniza_tiempo == 1,
-        (ceniza_tiempo == 2) & (delta2 >= -1),
-        (ceniza_tiempo == 2) & (delta2 >= -1.5)
-    ]
-    val_um1 = [1, 2, 3]
-    ceniza_um1 = np.select(cond_um1, val_um1, default=ceniza_tiempo)
-
-    cond_um2 = [
-        (ceniza_um1 <= 2) & (delta3 <= 0),
-        (ceniza_um1 >= 3) & (delta3 <= 1.5)
-    ]
-    ceniza_um2 = np.select(cond_um2, [0, 0], default=ceniza_um1)
-
-    # Clasificación final basada en fase de la nube
-    cond_final = [
-        (ceniza_um2 == 2) & (phase == 1), # Nube de agua
-        (ceniza_um2 == 2) & (phase == 4), # Hielo
-        (ceniza_um2 == 3) & (phase == 1), # Nube de agua
-        (ceniza_um2 == 3) & (phase >= 2)  # Superfría
-    ]
-    val_final = [3, 0, 0, 0]
-    ceniza = np.select(cond_final, val_final, default=ceniza_um2)
-    
-    # Marcar píxeles sin datos válidos como 255 (nodata)
-    ceniza = ceniza.astype(np.uint8)
-    ceniza[~valid_data_mask] = 255
+    ceniza = classify_ash(c04, c07, c11, c13, c15, phase, sza, valid_data_mask)
 
     print("\n--- Clasificación Final de Ceniza ---")
     logger.debug(f"Forma del array final: {ceniza.shape}")
@@ -929,6 +955,7 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     # Asignamos la información de proyección (CRS) y la geotransformación
     output_da.rio.write_crs(crs_goes, inplace=True)
     output_da.rio.write_transform(geotransform, inplace=True)
+    output_da.rio.write_nodata(255, inplace=True)
 
     # Reproyectar a coordenadas geográficas si se especificó
     if bbox and reproject_to_geo:
@@ -1109,8 +1136,11 @@ def main():
     
     # Cargar recursos pesados una sola vez
     logger.debug("Cargando efemérides de Skyfield (una sola vez)...")
-    eph_global = load('de421.bsp')
-    ts_global = load.timescale()
+    skyfield_cache = Path('/usr/local/share/lanot/skyfield')
+    skyfield_cache.mkdir(parents=True, exist_ok=True)
+    loader = Loader(skyfield_cache)
+    eph_global = loader('de421.bsp')
+    ts_global = loader.timescale()
     
     # Contadores para estadísticas
     instantes_exitosos = 0
@@ -1167,10 +1197,8 @@ def main():
             instantes_exitosos += 1
         except Exception as e:
             instantes_con_error += 1
-            logger.error(f"\n*** Error procesando instante {instant_str}: {e}")
+            logger.exception(f"\n*** Error crítico procesando instante {instant_str}:")
             logger.debug("Continuando con el siguiente instante...")
-            import traceback
-            traceback.print_exc()
             continue
 
     # Mostrar estadísticas finales
