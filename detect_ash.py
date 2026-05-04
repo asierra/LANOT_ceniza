@@ -610,7 +610,7 @@ def classify_ash(c04, c07, c11, c13, c15, phase, sza, valid_data_mask, kernel_si
     # Máscaras de iluminación
     mask_noche = sza > 85
     mask_dia = sza < 70
-    mask_crepusculo = (sza >= 70) & (sza <= 85)
+    mask_crepusculo = (sza > 70) & (sza < 85)
 
     # Cálculo de textura
     media, dst = genera_media_dst(delta1, kernel_size=kernel_size)
@@ -640,7 +640,7 @@ def classify_ash(c04, c07, c11, c13, c15, phase, sza, valid_data_mask, kernel_si
 
     # Día
     cond_dia = [
-        ((delta1 < 0) & (delta2 > 0) & (delta3 > 2)) | (nhood == 1),
+        ((delta1 < 0) & (delta2 > 0) & (delta3 > 2) & (c04 > 0.002)) | (nhood == 1),
         ((delta1 < 1) & (delta2 > -0.5) & (delta3 > 2) & (c04 > 0.002)) | (nhood == 2)
     ]
     ceniza_dia = np.select(cond_dia, [1, 2], default=0)
@@ -656,9 +656,10 @@ def classify_ash(c04, c07, c11, c13, c15, phase, sza, valid_data_mask, kernel_si
     cond_um1 = [
         ceniza_tiempo == 1,
         (ceniza_tiempo == 2) & (delta2 >= -1),
-        (ceniza_tiempo == 2) & (delta2 >= -1.5)
+        (ceniza_tiempo == 2) & (delta2 >= -1.5),
+        (ceniza_tiempo == 2) & (delta2 < -1.5)
     ]
-    val_um1 = [1, 2, 3]
+    val_um1 = [1, 2, 3, 0]
     ceniza_um1 = np.select(cond_um1, val_um1, default=ceniza_tiempo)
 
     cond_um2 = [
