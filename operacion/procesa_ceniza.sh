@@ -17,7 +17,7 @@ BASE=${BASE:-/data/ceniza/oper}                        # trabajo, caché tempora
 SALIDA=${SALIDA:-$BASE/conus}                          # GeoTIFF de ceniza
 TCACHE=$BASE/aitf_temporal_cache                       # caché temporal propio de CSPP
 CSV=$BASE/latencia_ceniza.csv
-INSTALACION=${INSTALACION:-/opt/lanot/ceniza}          # clon del repo con su .venv (operacion/instala.sh)
+INSTALACION=${INSTALACION:-/opt/lanot/ceniza}          # donde instala operacion/instala.sh
 CENIZA=$INSTALACION/.venv/bin/lanot-detect-ash
 AITF_DIR=${AITF_DIR:-$HOME/csppgeo/cspp-geo-aitf-2.3}  # CSPP Geo AIT 2.3.1
 
@@ -38,7 +38,7 @@ FILAS_SEGMENTO=${FILAS_SEGMENTO:-375}
 falta () { echo "Error: $*" >&2; exit 1; }
 [[ "$BASE" == /?*/* ]]            || falta "BASE debe ser una ruta absoluta de al menos dos niveles ($BASE)."
 [ -x "$AITF_DIR/aitf" ]           || falta "no encuentro CSPP Geo AIT en $AITF_DIR (ajusta AITF_DIR)."
-[ -x "$CENIZA" ]                  || falta "no encuentro $CENIZA; instala con $INSTALACION/operacion/instala.sh."
+[ -x "$CENIZA" ]                  || falta "no encuentro $CENIZA; instala con operacion/instala.sh desde el clon del repositorio."
 [ -d "$L1B_DIR" ]                 || falta "no existe el directorio de L1b $L1B_DIR."
 [ -d "$CSPP_GEO_AITF_CACHE" ]     || falta "no existe el caché dinámico de CSPP $CSPP_GEO_AITF_CACHE."
 

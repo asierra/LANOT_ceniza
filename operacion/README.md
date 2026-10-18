@@ -9,23 +9,26 @@
 
 ## Instalación
 
-Se instala en `/opt/lanot/ceniza` como `lanotadm`, con su propio ambiente de Python (`.venv`, creado con el Python del sistema; no depende de conda ni de ninguna cuenta personal).
+El código se clona en `~/src` de quien instala y se instala en `/opt/lanot/ceniza`, con su propio ambiente de Python (`.venv`, creado con el Python del sistema; no depende de conda ni de ninguna cuenta personal). Después de instalar, `/opt/lanot/ceniza` no depende del clon.
 
 ```bash
-# Una sola vez: /opt/lanot es de root
-sudo mkdir /opt/lanot/ceniza
+# Una sola vez: /opt/lanot es de root. El grupo ash puede instalar y actualizar.
+sudo mkdir -p /opt/lanot/ceniza
 sudo chown lanotadm:ash /opt/lanot/ceniza
+sudo chmod 2775 /opt/lanot/ceniza
 
-# Como lanotadm
-git clone https://github.com/asierra/LANOT_ceniza.git /opt/lanot/ceniza
-cd /opt/lanot/ceniza && operacion/instala.sh
+# Clonar e instalar (con cualquier usuario del grupo ash)
+git clone git@github.com:asierra/LANOT_ceniza.git ~/src/LANOT_ceniza
+cd ~/src/LANOT_ceniza && operacion/instala.sh            # destino por omisión: /opt/lanot/ceniza
 ```
 
 Para actualizar:
 
 ```bash
-cd /opt/lanot/ceniza && git pull && operacion/instala.sh
+cd ~/src/LANOT_ceniza && git pull && operacion/instala.sh
 ```
+
+`/opt/lanot/ceniza/VERSION` dice de qué commit se instaló.
 
 ### Requisitos en el servidor
 
