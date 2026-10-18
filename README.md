@@ -127,6 +127,7 @@ lanot-detect-ash --instant 20191001731 --clip popocatepetlgeo --output /data/res
   - `popocatepetl`: Región del Popocatépetl (proyección GOES nativa)
   - `popocatepetlgeo`: Región del Popocatépetl (reproyectado a lat/lon EPSG:4326)
 - `--png`: Genera también una imagen PNG a color con mapa base, fecha/hora y logo LANOT
+- `--jobs`: Número de procesos para el kernel estadístico. Por omisión usa la variable de entorno `LANOT_CENIZA_JOBS` o, si no está definida, todos los núcleos menos 2
 
 ### Ejemplos de uso
 
@@ -400,3 +401,7 @@ Ver archivo [LICENSE](LICENSE) para más detalles.
 - Víctor Manuel Jiménez Escudero, ...
 
 Laboratorio Nacional de Observación de la Tierra (LANOT)
+
+## Operación de baja latencia
+
+El directorio `operacion/` tiene el script, el instalador y el crontab de ejemplo para producir la ceniza CONUS de cada escaneo en un servidor aparte (tahan), con CSPP Geo AIT reducido a lo que necesita el algoritmo. Ver `operacion/README.md`.

@@ -21,6 +21,10 @@ logger = logging.getLogger(__name__)
 # Ruta al directorio de datos L2
 l2_path = Path("/data/ceniza/l2")
 
+# Procesos para la desviación estándar del kernel. None = todos los núcleos menos 2.
+# Se fija con --jobs o con la variable de entorno LANOT_CENIZA_JOBS.
+N_JOBS = int(os.environ["LANOT_CENIZA_JOBS"]) if os.environ.get("LANOT_CENIZA_JOBS") else None
+
 # Regiones predefinidas para recorte [lon_min, lat_max, lon_max, lat_min]
 CLIP_REGIONS = {
     'centromex': [-107.2319400, 22.7180385, -93.8363933, 14.9386282],
@@ -519,6 +523,8 @@ def genera_media_dst(arreglo, kernel_size=5, n_jobs=None):
     kernel_media = np.divide(suma_local, conteo_local, where=conteo_local!=0, out=np.full(arreglo.shape, np.nan))
 
     # --- Desviación Estándar (usando procesamiento paralelo) ---
+    if n_jobs is None:
+        n_jobs = N_JOBS
     if n_jobs is None:
         n_jobs = max(1, multiprocessing.cpu_count() - 2)  # Dejar 2 cores libres
     
@@ -1070,7 +1076,14 @@ def main():
                         help="Modo verbose: muestra información detallada del procesamiento. "
                              "Por defecto, solo se muestran mensajes esenciales de progreso.")
     
+    parser.add_argument('-j', '--jobs', type=int, default=None,
+                        help="Procesos para el kernel estadístico. Por defecto, LANOT_CENIZA_JOBS "
+                             "o todos los núcleos menos 2.")
+
     args = parser.parse_args()
+    if args.jobs is not None:
+        global N_JOBS
+        N_JOBS = max(1, args.jobs)
     
     # Configurar nivel de logging según --verbose
     log_level = logging.DEBUG if args.verbose else logging.INFO
