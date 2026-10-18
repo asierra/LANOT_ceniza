@@ -42,7 +42,8 @@ git -C "$RAIZ" describe --always --dirty --tags > "$DESTINO/VERSION" 2>/dev/null
 
 # Efemérides de Skyfield: detect_ash.py las busca en /usr/local/share/lanot/skyfield.
 if [ ! -r /usr/local/share/lanot/skyfield/de421.bsp ]; then
-    echo "AVISO: falta /usr/local/share/lanot/skyfield/de421.bsp (hay una copia en $RAIZ/de421.bsp)." >&2
+    echo "AVISO: falta /usr/local/share/lanot/skyfield/de421.bsp (no está en el repo). Para descargarlo:" >&2
+    echo "  sudo mkdir -p /usr/local/share/lanot/skyfield && sudo $DESTINO/.venv/bin/python -c \"from skyfield.api import Loader; Loader('/usr/local/share/lanot/skyfield')('de421.bsp')\"" >&2
 fi
 
 "$DESTINO/.venv/bin/lanot-detect-ash" --help > /dev/null

@@ -38,7 +38,7 @@ cd ~/src/LANOT_ceniza && git pull && operacion/instala.sh
 | CSPP Geo AIT 2.3.1 | `~lanotadm/csppgeo/cspp-geo-aitf-2.3` | `AITF_DIR` |
 | L1b CONUS | `/data1/input/abi/l1b/conus` | `L1B_DIR` |
 | Caché dinámico de CSPP | `/data1/aitf_2_3_cache` | `CSPP_GEO_AITF_CACHE` |
-| Efemérides de Skyfield | `/usr/local/share/lanot/skyfield/de421.bsp` | — (hay una copia en la raíz del repo) |
+| Efemérides de Skyfield | `/usr/local/share/lanot/skyfield/de421.bsp` | — (no están en el repo; `instala.sh` dice cómo descargarlas si faltan) |
 | Directorio de trabajo y salida | `/data/ceniza/oper` (grupo `ash`) | `BASE`, `SALIDA` |
 
 `procesa_ceniza.sh` revisa todo esto al arrancar y avisa qué falta.
