@@ -27,6 +27,9 @@ dependencies = [
   "matplotlib",
 ]
 
+[project.optional-dependencies]
+pruebas = ["pytest"]
+
 [project.urls]
 Repository = "https://github.com/asierra/LANOT_ceniza"
 Issues = "https://github.com/asierra/LANOT_ceniza/issues"
@@ -38,3 +41,11 @@ lanot-compare-ash = "compare_ash:main"
 [tool.hatch.build.targets.wheel]
 packages = []
 include = ["detect_ash.py", "compare_ash.py"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+  # nanstd en ventanas sin datos (bordes, fuera del disco): es lo esperado
+  "ignore:Degrees of freedom <= 0:RuntimeWarning",
+  "ignore:numpy.ndarray size changed:RuntimeWarning",
+]

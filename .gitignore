@@ -208,3 +208,7 @@ __marimo__/
 de421.bsp
 *.tif
 *.png
+
+# Datos de las pruebas de regresión (recortes chicos, ver tests/test_regresion.py)
+!tests/datos/**/*.tif
+!tests/datos/**/*.nc
