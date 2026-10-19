@@ -1,9 +1,10 @@
 #!/bin/bash
-# Producto de ceniza CONUS de baja latencia, en tahan.
+# Producto de ceniza de baja latencia a partir del escaneo CONUS, en tahan.
 #
 # Corre CSPP Geo AIT solo con lo que necesita el algoritmo (cmi, acm, actp) y en 4 segmentos,
-# y luego detect_ash.py. No toca la cadena de cirrus: lee las L1b y el caché dinámico de
-# CSPP del /data de cirrus, montado en tahan como /data1, y escribe todo en /data/ceniza/oper.
+# y luego detect_ash.py, recortado a la región RECORTE. No toca la cadena de cirrus: lee las
+# L1b y el caché dinámico de CSPP del /data de cirrus, montado en tahan como /data1, y escribe
+# todo en /data/ceniza/oper.
 #
 #   procesa_ceniza.sh                 el escaneo CONUS más reciente con las 16 bandas
 #   procesa_ceniza.sh s20262911721    un escaneo concreto (sAAAAJJJHHMM)
@@ -14,7 +15,10 @@
 # Configuración. Todo se puede cambiar con variables de entorno (por ejemplo, en el crontab).
 L1B_DIR=${L1B_DIR:-/data1/input/abi/l1b/conus}         # L1b CONUS de cirrus (su /data en /data1)
 BASE=${BASE:-/data/ceniza/oper}                        # trabajo, caché temporal, salida y CSV
-SALIDA=${SALIDA:-$BASE/conus}                          # GeoTIFF de ceniza
+# Región de detect_ash.py (--clip). ashpapergeo: la región del artículo, en lat/lon (EPSG:4326).
+# RECORTE= (vacío) genera el GeoTIFF CONUS completo, en proyección GOES (~9 s más por escaneo).
+RECORTE=${RECORTE-ashpapergeo}
+SALIDA=${SALIDA:-$BASE/${RECORTE:-conus}}              # GeoTIFF de ceniza
 TCACHE=$BASE/aitf_temporal_cache                       # caché temporal propio de CSPP
 CSV=$BASE/latencia_ceniza.csv
 INSTALACION=${INSTALACION:-/opt/lanot/ceniza}          # donde instala operacion/instala.sh
@@ -85,7 +89,7 @@ if ! aitf -o "$work" --cache-only --temporal-cache-dir $TCACHE \
 fi
 t_cspp=$(date +%s.%N)
 
-if ! $CENIZA -p "$work" -m ${id#s} -o $SALIDA/ > "$work/ceniza.out" 2>&1; then
+if ! $CENIZA -p "$work" -m ${id#s} ${RECORTE:+--clip $RECORTE} -o $SALIDA/ > "$work/ceniza.out" 2>&1; then
     echo "Error: detect_ash.py falló para $id; ver $work/ceniza.out" >&2
     exit 1
 fi

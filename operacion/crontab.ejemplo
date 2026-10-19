@@ -1,4 +1,4 @@
-# Ceniza CONUS de baja latencia (crontab de lanotadm en tahan).
+# Ceniza de baja latencia (recorte de la región del artículo) (crontab de lanotadm en tahan).
 # cirrus trae las L1b de la estación a las x4:20; aquí se procesan a las x4:30.
 # La corrida de las x5:10 es de respaldo para escaneos que lleguen tarde; si el escaneo
 # más reciente ya se procesó, sale sin hacer nada.
