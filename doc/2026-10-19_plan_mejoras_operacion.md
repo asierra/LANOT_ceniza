@@ -240,4 +240,5 @@ El prototipo de referencia usaba las clases 4 y 5 para HAP y LAP con agua líqui
 | P3 | `8ee5257` | |
 | P4 | `3073b65` | códigos de salida: 0 bien, 1 error, 2 uso, 3 faltan datos |
 | P5 | `8196b08` | README, `compare_ash.py`, sin `requirements.txt`; matplotlib opcional; este documento y `2026-10-18_operacion_tahan.md` |
-| P7 (0 y `.qml`) | (este commit) | sin ceniza = 0, sin datos = 255, `.qml` junto a cada GeoTIFF; probado en QGIS 3.44 LTR |
+| P7 (0 y `.qml`) | `6959b70` | sin ceniza = 0, sin datos = 255, `.qml` junto a cada GeoTIFF; probado en QGIS 3.44 LTR |
+| P7 (6 = nube) | (este commit) | fases mixta y hielo; 319 píxeles de 65 352 en los casos de regresión |

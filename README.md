@@ -186,6 +186,7 @@ GeoTIFF de una banda (uint8) con tabla de colores, en la proyección geoestacion
 | 2 | probabilidad alta (HAP) | naranja |
 | 3 | probabilidad baja (LAP) | amarillo |
 | 4, 5 | reservados (los usaban versiones anteriores; ver `ash.cpt`) | — |
+| 6 | nube: sin ceniza detectable bajo nube de fase mixta o hielo | gris |
 | 255 | sin datos (NoData) | transparente |
 
 La paleta de un TIFF no guarda transparencia, así que sin el `.qml` QGIS dibuja el 0 en negro. QGIS carga el `.qml` solo si está junto al GeoTIFF con el mismo nombre; si no, se puede cargar a mano el `ceniza.qml` del repositorio (Propiedades → Simbología → Estilo → Cargar estilo). `--sin-qml` evita escribirlo. Entre mayo y octubre de 2026 el 0 se guardaba como 255.
@@ -302,6 +303,7 @@ Usando el producto ACTP (Cloud Top Phase):
 - HAP sobre agua líquida pasa a LAP; HAP sobre hielo se elimina.
 - LAP sobre cualquier nube (fase 1 a 5) se elimina.
 - La ceniza confirmada no cambia.
+- Lo que queda sin ceniza bajo nube de fase mixta (3) o hielo (4) se marca como nube (6): ahí la ceniza no se puede ver.
 
 La tabla completa de reglas, y las que están en revisión, está en [el plan de octubre de 2026](doc/2026-10-19_plan_mejoras_operacion.md) (P10, P11) y en `tests/test_clasificacion.py`.
 

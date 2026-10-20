@@ -74,8 +74,13 @@ CLASES = {
     3: ((255, 255, 0), "probabilidad baja", 255),
     4: ((0, 255, 0), "reservado: HAP sobre agua líquida", 255),
     5: ((0, 0, 255), "reservado: LAP sobre agua líquida", 255),
+    6: ((160, 160, 160), "nube: ceniza no detectable", 255),
 }
-CLASES_EN_LEYENDA = [0, 1, 2, 3]
+CLASES_EN_LEYENDA = [0, 1, 2, 3, 6]
+NUBE = 6
+# Fases ACTP que tapan la vista: 3 mixta, 4 hielo. La superenfriada (2) no entra por ahora
+# (por revisar con el autor principal; ver doc/2026-10-19_plan_mejoras_operacion.md).
+FASES_NUBE = (3, 4)
 ASH_COLORS = {v: rgb for v, (rgb, _, _) in CLASES.items()} | {SIN_DATOS: (0, 0, 0)}
 
 
@@ -600,9 +605,12 @@ def classify_ash(c04, c07, c11, c13, c15, phase, sza, valid_data_mask, kernel_si
     val_final = [3, 0, 0, 0]
     ceniza = np.select(cond_final, val_final, default=ceniza_um2)
 
-    # Marcar píxeles sin datos válidos como 255 (nodata)
+    # Sin ceniza bajo nube de fase mixta o hielo: no se puede saber si hay ceniza.
     ceniza = ceniza.astype(np.uint8)
-    ceniza[~valid_data_mask] = 255
+    ceniza[(ceniza == 0) & np.isin(phase, FASES_NUBE)] = NUBE
+
+    # Marcar píxeles sin datos válidos como 255 (nodata)
+    ceniza[~valid_data_mask] = SIN_DATOS
 
     return ceniza
 

@@ -7,6 +7,7 @@
 3 255 255   0 ; less probable
 4   0 255   0 ; cloud
 5   0   0 255 ; noise
+6 160 160 160 ; nube (desde octubre de 2026)
 B   0   0   0
 F 255 255 255
 N 255   0   0

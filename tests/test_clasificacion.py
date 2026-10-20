@@ -32,8 +32,10 @@ def kernel(d1_centro, d2, d3, sza=NOCHE, fase=SIN_FASE):
     d1[2, 2] = d1_centro
     c13 = np.full((5, 5), 250.0, np.float32)
     lleno = lambda v: np.full((5, 5), v, np.float32)
+    phase = lleno(SIN_FASE)
+    phase[2, 2] = fase  # solo el centro, para que los vecinos sigan en 0
     c = classify_ash(c04=lleno(0.01), c07=c13 + d3, c11=c13 + d2, c13=c13, c15=c13 - d1,
-                     phase=lleno(fase), sza=lleno(sza), valid_data_mask=np.ones((5, 5), bool))
+                     phase=phase, sza=lleno(sza), valid_data_mask=np.ones((5, 5), bool))
     assert (np.delete(c.ravel(), 12) == 0).all(), "los vecinos no deben clasificar"
     return int(c[2, 2])
 
@@ -128,15 +130,28 @@ def test_ca_del_kernel_con_dt3_no_positivo_se_elimina():
 
 
 # --- Regla de fase (P10, por decidir) -------------------------------------------------
+# Lo que la regla de fase elimina queda como 6 (nube) si la fase es mixta (3) o hielo (4).
 
-@pytest.mark.parametrize("fase,esperado", [(0, 2), (1, 3), (2, 2), (3, 2), (4, 0), (5, 2)])
+@pytest.mark.parametrize("fase,esperado", [(0, 2), (1, 3), (2, 2), (3, 2), (4, 6), (5, 2)])
 def test_fase_sobre_hap(fase, esperado):
     assert pixel(0.5, -0.2, 3, NOCHE, fase=fase) == esperado
 
 
-@pytest.mark.parametrize("fase,esperado", [(0, 3), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0)])
+@pytest.mark.parametrize("fase,esperado", [(0, 3), (1, 0), (2, 0), (3, 6), (4, 6), (5, 0)])
 def test_fase_sobre_lap(fase, esperado):
     assert kernel(0.5, d2=-1.2, d3=3, fase=fase) == esperado
+
+
+# --- Nube (6) ----------------------------------------------------------------------------
+
+@pytest.mark.parametrize("fase,esperado", [(0, 0), (1, 0), (2, 0), (3, 6), (4, 6), (5, 0)])
+def test_sin_ceniza_bajo_nube(fase, esperado):
+    # La fase superenfriada (2) no cuenta como nube por ahora (por revisar).
+    assert pixel(1.5, 0.5, 3, NOCHE, fase=fase) == esperado
+
+
+def test_nube_sin_datos_sigue_sin_datos():
+    assert pixel(1.5, 0.5, 3, NOCHE, fase=4, valido=False) == 255
 
 
 @pytest.mark.parametrize("fase", [0, 1, 2, 3, 4, 5])
