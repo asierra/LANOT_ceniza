@@ -14,9 +14,11 @@ El código no se revisaba desde mayo de 2026 (refactorización) y la parte cient
 |---|---|---|---|
 | diciembre | `90ad79f` (2025-12-06; ciencia idéntica a `c93d979`) | `tahan:/opt/LANOT_ceniza.old` | produjo los resultados del artículo |
 | mayo | `9dd4752` (2026-05-04) | `tahan:/opt/LANOT_ceniza` | refactorización + "igualar terascan" |
-| operación | `feb5241` | `tahan:/opt/lanot/ceniza` (pendiente de instalar) | lo que corre hoy, con la ciencia de mayo |
+| operación | `feb5241` (al empezar); `286a509` (instalada el 2026-10-20, ~01:20 UTC) | `tahan:/opt/lanot/ceniza` | la ciencia de mayo al empezar; con este plan, las fases 0 a 2 |
 
 Datos para comparar: en tahan siguen las entradas L2 del 2024-02-27 (`/data/ceniza/l2/2024/02/27`) y las 168 salidas de diciembre (`/data/ceniza/output/20240227`). Para 2019 y 2023 también hay entradas en `/data/ceniza/l2`.
+
+**Muestra usada en las comparaciones ("63 escenas"):** CONUS completo, copiado de tahan: 2024-02-27 (cada hora, y cada 5 min de 03:00 a 04:56 UTC, con ceniza de noche) y 2019-03-01 de 11:02 a 15:02 UTC cada 15 min (amanecer, crepúsculo y día; con duplicados CG_/OR_). En total, 236 millones de píxeles.
 
 ## Orden propuesto
 
@@ -38,11 +40,13 @@ Primero la herramienta de comparación, porque con ella se evalúan todos los de
 **Por qué.** No hay pruebas. Sin una forma reproducible de comparar dos versiones, cualquier cambio a la ciencia es a ciegas.
 
 **Qué.**
-- Script `herramientas/compara_versiones.py`. Corre dos versiones (dos commits, o dos instalaciones) sobre el mismo conjunto de instantes y reporta por clase: píxeles que cambian, matriz de confusión 0/1/2/3/255 y escaneos con ceniza que aparecen o desaparecen. La salida de diciembre es RGBA; se decodifica a clases por color (rojo = 1, naranja = 2, amarillo = 3, transparente = 0 o sin datos).
+- `herramientas/corre_version.sh` corre cualquier commit (o el árbol de trabajo) sobre una lista de instantes, y `herramientas/compara_salidas.py` compara dos carpetas de salidas y reporta por clase: píxeles que cambian, matriz de confusión 0/1/2/3/255 y escaneos con ceniza que aparecen o desaparecen. La salida de diciembre es RGBA; se decodifica a clases por color (rojo = 1, naranja = 2, amarillo = 3, transparente = 0 o sin datos).
 - Pruebas con `pytest`:
   - **Unitarias** de `classify_ash` con arreglos sintéticos pequeños, un caso por regla (cada umbral, cada bloque de iluminación, cada regla de fase). Documentan la regla y detectan cambios accidentales.
   - **Regresión** con un recorte pequeño de un caso real (por ejemplo, 2019-03-01, el de la animación), con la salida esperada guardada en el repo (unos KB).
-- La comparación grande (días completos) se corre a mano en tahan. No va en las pruebas.
+- La comparación grande (escenas CONUS completas) se corre a mano, con datos copiados de tahan. No va en las pruebas.
+
+**Resultado.** 85 pruebas (`pytest`), con recortes de 122×178 píxeles de tres casos reales: noche (2024-02-27 04:06), crepúsculo (2019-03-01 13:32) y día (14:37). `herramientas/genera_fixture.py` hace los recortes. La versión de diciembre también se puede correr (con módulos vacíos en lugar de PIL y mapdrawer).
 
 **Riesgo.** Ninguno; no toca la operación.
 
@@ -60,7 +64,9 @@ Primero la herramienta de comparación, porque con ella se evalúan todos los de
 
 **Verificación.** Con P0, en días completos. Se espera clasificación idéntica, salvo píxeles justo en un umbral (diferencia de redondeo); se cuentan.
 
-**Efecto en la operación.** El paso de ceniza baja de ~9 s a ~2 s y se liberan 16 núcleos de tahan para la cadena polar.
+**Efecto en la operación.** Se liberan 16 núcleos de tahan para la cadena polar.
+
+**Resultado.** 0 píxeles distintos en las 63 escenas; 2.6 s por escena contra ~45 s antes (6 núcleos, aquí). En tahan, el paso de ceniza (recorte `ashpapergeo`) bajó de 9.2 s a **1.0 s**, y la latencia total de ~4.5 a **~4.3 min** (desde el 2026-10-20 00:41 UTC).
 
 ### P2. Búsqueda de archivos con expresión regular estricta
 
@@ -68,13 +74,15 @@ Primero la herramienta de comparación, porque con ella se evalúan todos los de
 
 **Qué.** Una sola función con una expresión regular por producto, por ejemplo `^(OR|CG)_ABI-L2-CMIPC-M\dC04_G\d{2}_s(\d{11})`. Se agrega la detección del satélite (G16/G19) y se exige que todos los archivos sean del mismo satélite y dominio (C = CONUS, F = disco completo). Los duplicados se resuelven de forma determinista (CG_ antes que OR_, y luego la fecha de creación `_c` más reciente).
 
-**Verificación.** Pruebas unitarias con listas de nombres reales (M3, M6, G16, G19, CG_, OR_, L1b mezclados) y `--dry-run` sobre los árboles históricos de 2019, 2023 y 2024: mismo número de instantes completos que hoy.
+**Verificación.** Pruebas unitarias con listas de nombres reales (M3, M6, G16, G19, CG_, OR_, L1b mezclados) y `--dry-run` sobre la muestra de 2019 y 2024: mismo número de instantes completos que antes (63 de 63). 2023 no se revisó.
 
 ### P3. Rutas configurables
 
 **Por qué.** `/usr/local/share/lanot/skyfield` está fija y además se intenta crear (`mkdir`), lo que falla por permisos fuera de LANOT. El paquete se anuncia como código abierto. `/data/ceniza/l2` también está fija como entrada por omisión.
 
 **Qué.** Variables de entorno `LANOT_SKYFIELD_DIR` (por omisión la ruta actual si existe; si no, el caché de usuario `~/.cache/lanot_ceniza`) y `LANOT_CENIZA_L2`. Sin `mkdir` en rutas del sistema. Un mensaje claro si falta `de421.bsp` (o se descarga en el caché de usuario).
+
+**Resultado.** Implementado así; pruebas en `tests/test_rutas.py`. En tahan sigue usando `/usr/local/share/lanot/skyfield`.
 
 ### P4. Reporte de fallas
 
@@ -90,7 +98,7 @@ Primero la herramienta de comparación, porque con ella se evalúan todos los de
 3. **Log útil:** la corrida de respaldo (x5:10) no escribe nada si la principal está en curso o ya terminó. Rotación mensual de `procesa.log` (logrotate o el propio script).
 4. **Vigilante** `operacion/vigila_ceniza.sh`, cada 15 min por cron:
    - revisa la antigüedad del GeoTIFF más reciente (falla si pasa de 15 min), las fallas de la última hora en el CSV y la latencia (falla si el p95 de la última hora pasa de 6 min);
-   - escribe `/data/ceniza/oper/estado.json` (estado, último producto, latencia, fallas recientes) para que lo lea un tablero o el dataservice;
+   - escribe `/data/ceniza/oper/state/estado.json` (estado, último producto, latencia, fallas recientes) para que lo lea un tablero o el dataservice;
    - registra **solo los cambios de estado** (ok → falla y falla → ok) en un log de eventos corto, que es el que se revisa.
 
 **Canal de aviso: solo logs (verificado el 2026-10-19).**
@@ -98,6 +106,8 @@ Primero la herramienta de comparación, porque con ella se evalúan todos los de
 - En cirrus, cron sí manda correo, pero a un buzón local que nadie lee (`/var/spool/mail/lanotadm`, 38 764 mensajes y 340 MB, casi todos salidas de `trae_glm.sh` y `trae_abi.sh`). `archivamail.sh` lo archiva cada mes.
 
 Se sigue la convención de la cadena polar: el log de corridas va en `/var/log/lanot/ceniza/` y el estado en `/data/ceniza/oper/state/` (`estado.json`, eventos). Un aviso activo (correo o mensajería) se puede agregar después leyendo los eventos, sin cambiar lo demás.
+
+**Resultado.** Probado con fallas simuladas (L1b incompletas, `aitf` y `lanot-detect-ash` que fallan a propósito) y con `tests/test_salida.py`. El código 3 de `lanot-detect-ash` (faltan productos L2) se registra como `error_cspp`. En tahan desde el 2026-10-20: el vigilante dio una falsa alarma al instalar (los escaneos de la hora anterior estaban en la carpeta vieja `conus/`); se corrigió para que busque los escaneos procesados en el CSV y no en la carpeta de salida (`b43e6a8`). Desde entonces, estado `ok`.
 
 ### P5. Limpieza y documentación
 
@@ -123,13 +133,17 @@ Se sigue la convención de la cadena polar: el log de corridas va en `/var/log/l
 
 **Efecto.** Solo cambian de bloque los píxeles con SZA a menos de ~0.35° de 70° u 85°, una franja de ~30–40 km que se mueve con el terminador. Se mide con P0 en días con amanecer y atardecer sobre la región.
 
+**¿Fue correcto usar Skyfield? Sí.** La decisión de 2025 (posición del Sol una vez por imagen con efemérides JPL y trigonometría esférica vectorizada para todos los píxeles) es la que bajó el tiempo de ~30 min a segundos, y sigue siendo correcta. El error era de uso (marco J2000 combinado con el tiempo sidéreo de la fecha), no de la biblioteca. Para umbrales de 70° y 85° bastaría una fórmula analítica (NOAA, ~0.01°) sin el archivo `de421.bsp` (17 MB); no vale la pena cambiar mientras Skyfield funcione. pvlib, la alternativa descartada, calcula por punto y sería lenta con millones de píxeles. Con la corrección, la precisión es ~0.003° (~9″), no "sub-arcsecond" como dice el artículo, pero sobra para el uso.
+
+**Resultado.** Error medido contra el cálculo topocéntrico completo: ~0.003° (`tests/test_sza.py`, tolerancia 0.01°). En las 63 escenas cambian 291 píxeles en 13 escenas de amanecer o atardecer (288 sin ceniza → HAP, 2 → LAP, 1 nube → HAP); la CA no cambia.
+
 ### P7. Valor de "sin ceniza": 0 en lugar de 255
 
 **Por qué.** Desde mayo (`785d9d5`) el 0 se convierte en 255 al guardar, y "no hay ceniza" queda igual que "no hay datos" (fuera del disco, banda faltante, ACTP sin valor). Para la operación sí importa: un píxel sin datos no es un píxel sin ceniza (por ejemplo, para decir "sin ceniza sobre el volcán" o para una estadística de cobertura).
 
 **Qué (confirmado el 2026-10-19).**
 - Guardar 0 = sin ceniza, 1–3 = clases y 255 = sin datos (NoData).
-- En la tabla de colores, 0 y 255 transparentes (GDAL admite alfa en el colormap), para que la vista sea igual que hoy.
+- La transparencia del 0 se resuelve con un estilo `.qml` (ver la prueba en QGIS más abajo): la paleta de un TIFF no guarda alfa.
 
 **Valores reservados.** Las versiones viejas (TeraScan y el prototipo de referencia; ver `ash.cpt`) usaban dos categorías más, que se desecharon:
 - 4 = `cloud` (verde): HAP sobre nube de agua líquida. Hoy esos píxeles pasan a LAP (3).
@@ -141,13 +155,13 @@ Quedan **reservadas**: el código no las produce, pero conservan su entrada en l
 
 | valor | significado | estado |
 |---|---|---|
-| 0 | sin ceniza | en uso (hoy se guarda como 255) |
+| 0 | sin ceniza | en uso (de mayo a octubre de 2026 se guardaba como 255) |
 | 1 | ceniza confirmada (CA) | en uso |
 | 2 | probabilidad alta (HAP) | en uso |
 | 3 | probabilidad baja (LAP) | en uso |
 | 4 | `cloud`: HAP sobre agua líquida | reservado (versiones viejas) |
 | 5 | `noise`: LAP sobre agua líquida | reservado (versiones viejas) |
-| 6 | nube: ceniza no detectable (fase mixta o hielo) | decidido; se implementa después del cambio 0/255 |
+| 6 | nube: ceniza no detectable (fase mixta o hielo) | en uso desde `e8dc297` |
 | 255 | sin datos | en uso |
 
 **Antes de cambiar:** el 255 se introdujo en mayo "para mejorar la compatibilidad con QGIS" (`785d9d5`): así QGIS deja transparente lo que no es ceniza sin configurar nada.
@@ -165,7 +179,9 @@ Quedan **reservadas**: el código no las produce, pero conservan su entrada en l
 - La máscara interna funciona en QGIS, pero los programas que respetan máscaras (por ejemplo, `rasterio.read(masked=True)`) tratarían el 0 como dato faltante, que es justo la confusión que se quiere quitar.
 - El estilo `.qml` junto al archivo (`ceniza_X.tif` + `ceniza_X.qml`) lo carga QGIS solo al abrirlo, deja el 0 transparente y además arregla la leyenda: hoy QGIS muestra 256 clases porque la paleta de un TIFF siempre tiene 256 entradas.
 
-**Propuesta:** datos limpios (0, 1–3, 6, 255; NoData = 255; sin máscara), un `ceniza.qml` en el repo y la opción de escribir el `.qml` junto a cada GeoTIFF (en operación, siempre; es ~1 KB). Las vistas web (LANOT_tools) colorean por su cuenta y no dependen de esto.
+**Decisión (2026-10-19, probada también en la interfaz de QGIS):** datos limpios (0, 1–3, 6, 255; NoData = 255; sin máscara), un `ceniza.qml` en el repo y el `.qml` junto a cada GeoTIFF (opción `--sin-qml` para no escribirlo). Costo en operación: ~0.04 ms y ~700 bytes por escaneo. Las vistas web (LANOT_tools) colorean por su cuenta y no dependen de esto.
+
+**Resultado.** En los casos de regresión la ceniza no cambia: 64 536 píxeles pasan de 255 a 0, 547 siguen como sin datos (sin fase o sin alguna banda válida) y 319 pasan de 0 a 6 (nube).
 
 Además hay que revisar quién consume los GeoTIFF (vistas de LANOT_tools, kawak, dataservice) y si alguno depende del 255. Hoy la operación es nueva y solo guarda en tahan, así que es buen momento.
 
@@ -175,11 +191,15 @@ Además hay que revisar quién consume los GeoTIFF (vistas de LANOT_tools, kawak
 
 **Qué.** Noche: SZA > 85; crepúsculo: 70 ≤ SZA ≤ 85; día: SZA < 70. Es lo que hacía la versión de diciembre.
 
+**Resultado.** 0 píxeles distintos en las 63 escenas: el hueco existía, pero casi nunca se presenta.
+
 ### P9. Banda C14
 
 **Por qué.** C14 (11.2 µm) se lee pero no entra en la clasificación; solo en la máscara de datos válidos. Si falta, se pierde el escaneo completo, y cada lectura cuesta E/S.
 
 **Qué.** Dejar de leerla. La máscara de datos válidos usa solo las bandas que sí se usan.
+
+**Resultado.** 0 píxeles distintos en las 63 escenas; los recortes de prueba ya no incluyen C14 y la regresión pasa.
 
 ---
 
@@ -237,7 +257,7 @@ El prototipo de referencia usaba las clases 4 y 5 para HAP y LAP con agua líqui
 | P0 | `6a366a5` | 3 casos reales (noche, crepúsculo, día) + pruebas por regla |
 | P1 | `6e3629d` | idéntico en 63 escenas CONUS completas (2024-02-27 y 2019-03-01): 0 píxeles distintos; 2.6 s por escena contra ~45 s antes (6 núcleos) |
 | P2 | `aa57f3c` | mismos 63/63 instantes completos en la muestra de 2019 y 2024 |
-| P3 | `8ee5257` | |
+| P3 | `8ee5257` | `tests/test_rutas.py` |
 | P4 | `3073b65` | códigos de salida: 0 bien, 1 error, 2 uso, 3 faltan datos |
 | P5 | `8196b08` | README, `compare_ash.py`, sin `requirements.txt`; matplotlib opcional; este documento y `2026-10-18_operacion_tahan.md` |
 | P7 (0 y `.qml`) | `6959b70` | sin ceniza = 0, sin datos = 255, `.qml` junto a cada GeoTIFF; probado en QGIS 3.44 LTR |
