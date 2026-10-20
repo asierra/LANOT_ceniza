@@ -235,7 +235,7 @@ El prototipo de referencia usaba las clases 4 y 5 para HAP y LAP con agua líqui
 | punto | commit | nota |
 |---|---|---|
 | P0 | `6a366a5` | 3 casos reales (noche, crepúsculo, día) + pruebas por regla |
-| P1 | `6e3629d` | casos de regresión idénticos |
+| P1 | `6e3629d` | idéntico en 63 escenas CONUS completas (2024-02-27 y 2019-03-01): 0 píxeles distintos; 2.6 s por escena contra ~45 s antes (6 núcleos) |
 | P2 | `aa57f3c` | mismos 63/63 instantes completos en la muestra de 2019 y 2024 |
 | P3 | `8ee5257` | |
 | P4 | `3073b65` | códigos de salida: 0 bien, 1 error, 2 uso, 3 faltan datos |
