@@ -429,9 +429,14 @@ def get_sun_zenith_angle(lat_array, lon_array, image_time_dt, eph, ts):
     image_time_sky = ts.from_datetime(image_time_dt)
     
     # --- 2. Calcular la posición del Sol (una sola vez) ---
-    # Observamos el Sol desde el centro de la Tierra
-    astrometric = earth.at(image_time_sky).observe(sun)
-    ra, dec, distance = astrometric.radec()
+    # Posición aparente del Sol vista desde el centro de la Tierra, con RA/Dec del
+    # equinoccio de la fecha: el mismo marco que el tiempo sidéreo aparente (gast) que se
+    # usa abajo. Hasta octubre de 2026 se usaba radec() a secas, que da coordenadas J2000;
+    # al combinarlas con gast faltaba la precesión desde 2000 y el SZA salía con un error
+    # de 0.2-0.4° (creciente con los años). Con el marco correcto el error es ~0.003°
+    # (lo que queda es la paralaje y la diferencia entre latitud geodésica y geocéntrica).
+    aparente = earth.at(image_time_sky).observe(sun).apparent()
+    ra, dec, distance = aparente.radec(epoch='date')
     
     # Convertir RA/Dec a radianes
     sun_ra_rad = ra.radians
