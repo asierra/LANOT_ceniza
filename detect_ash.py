@@ -542,7 +542,9 @@ def classify_ash(c04, c07, c11, c13, c15, phase, sza, valid_data_mask, kernel_si
     # Máscaras de iluminación
     mask_noche = sza > 85
     mask_dia = sza < 70
-    mask_crepusculo = (sza > 70) & (sza < 85)
+    # 70° ≤ SZA ≤ 85°. Con límites estrictos (mayo de 2026) los valores exactos 70 y 85 se
+    # quedaban sin bloque.
+    mask_crepusculo = (sza >= 70) & (sza <= 85)
 
     # Cálculo de textura
     media, dst = genera_media_dst(delta1, kernel_size=kernel_size)

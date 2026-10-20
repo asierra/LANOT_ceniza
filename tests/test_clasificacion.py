@@ -81,9 +81,15 @@ def test_dia_no_exige_c13_frio():
 
 
 @pytest.mark.parametrize("sza", [70.0, 85.0])
-def test_limites_del_crepusculo_sin_bloque(sza):
-    # Cambia en P8: con 70 ≤ SZA ≤ 85 estos píxeles serán de crepúsculo.
-    assert pixel(-0.5, 0.5, 3, sza) == 0
+def test_limites_del_crepusculo(sza):
+    # 70 ≤ SZA ≤ 85 es crepúsculo (P8): la CA no exige C04, el HAP exige C13 frío.
+    assert pixel(-0.5, 0.5, 3, sza, c04=0.0) == 1
+    assert pixel(0.5, -0.2, 3, sza, c13=280) == 0
+
+
+def test_justo_fuera_del_crepusculo():
+    assert pixel(0.5, -0.2, 3, 85.001, c13=280, c04=0.0) == 2   # noche
+    assert pixel(-0.5, 0.5, 3, 69.999, c04=0.0) == 0             # día, exige C04
 
 
 def test_sin_datos():
