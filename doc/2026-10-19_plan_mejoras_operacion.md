@@ -1,7 +1,7 @@
 # Plan de mejoras para la operación de `detect_ash.py`
 
 - **Fecha:** 2026-10-19
-- **Estado:** aprobado el 2026-10-19. Fases 0 y 1 implementadas el mismo día (ver "Seguimiento" al final); de la fase 2, P7 en curso; el resto de las fases 2 y 3, pendiente.
+- **Estado:** aprobado el 2026-10-19. Fases 0, 1 y 2 implementadas el 2026-10-19 y 20 (ver "Seguimiento" al final). Fase 3 (P10, P11) pendiente de decisión con el autor principal.
 - **Rama:** `operacion-tahan`
 
 ## Contexto
@@ -241,4 +241,8 @@ El prototipo de referencia usaba las clases 4 y 5 para HAP y LAP con agua líqui
 | P4 | `3073b65` | códigos de salida: 0 bien, 1 error, 2 uso, 3 faltan datos |
 | P5 | `8196b08` | README, `compare_ash.py`, sin `requirements.txt`; matplotlib opcional; este documento y `2026-10-18_operacion_tahan.md` |
 | P7 (0 y `.qml`) | `6959b70` | sin ceniza = 0, sin datos = 255, `.qml` junto a cada GeoTIFF; probado en QGIS 3.44 LTR |
-| P7 (6 = nube) | (este commit) | fases mixta y hielo; 319 píxeles de 65 352 en los casos de regresión |
+| P7 (6 = nube) | `e8dc297` | fases mixta y hielo; 319 píxeles de 65 352 en los casos de regresión |
+| P6 | `a888c98` | 63 escenas: 291 píxeles cambian en 13 escenas de amanecer o atardecer (288 sin ceniza → HAP, 2 → LAP, 1 nube → HAP); la CA no cambia |
+| P8 | `fd20e2e` | 63 escenas: 0 píxeles distintos (el SZA exacto en 70 u 85 casi no ocurre) |
+| P9 | `25861d7` | 63 escenas: 0 píxeles distintos |
+| `vigila_ceniza.sh` | `b43e6a8` | escaneos perdidos según el CSV y no la carpeta de salida (falsa alarma al cambiar RECORTE) |

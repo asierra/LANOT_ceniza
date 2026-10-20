@@ -69,6 +69,8 @@ def main():
     ap.add_argument("--detalle", action="store_true", help="una línea por instante, aunque no haya diferencias")
     ap.add_argument("--une-sin-ceniza", action="store_true",
                     help="cuenta 'sin ceniza' (0) y 'sin datos' (255) como lo mismo")
+    ap.add_argument("--solo-ceniza", action="store_true",
+                    help="compara solo la ceniza: 0, nube (6) y sin datos (255) cuentan como sin ceniza")
     args = ap.parse_args()
 
     A, B = por_instante(args.a), por_instante(args.b)
@@ -87,6 +89,9 @@ def main():
         ca, pa, ra = lee(A[inst])
         cb, pb, rb = lee(B[inst])
         cb = a_rejilla(cb, pb, pa)
+        if args.solo_ceniza:
+            ca = np.where(np.isin(ca, [1, 2, 3]), ca, 0)
+            cb = np.where(np.isin(cb, [1, 2, 3]), cb, 0)
         if ra or rb or args.une_sin_ceniza:  # en RGBA, sin ceniza y sin datos no se distinguen
             rgba_visto = True
             ca = np.where(ca == 255, 0, ca)
