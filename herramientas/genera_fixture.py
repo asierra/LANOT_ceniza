@@ -25,7 +25,6 @@ PRODUCTOS = {
     "C07": r"CMIPC-M\dC07_",
     "C11": r"CMIPC-M\dC11_",
     "C13": r"CMIPC-M\dC13_",
-    "C14": r"CMIPC-M\dC14_",
     "C15": r"CMIPC-M\dC15_",
 }
 VARIABLES = {"ACTP": "Phase"}  # las bandas usan CMI

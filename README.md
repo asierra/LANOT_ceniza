@@ -19,7 +19,6 @@ El sistema utiliza múltiples canales infrarrojos y productos derivados para:
 - **C07**: Canal 7 (3.9 μm) - Infrarrojo de onda corta
 - **C11**: Canal 11 (8.4 μm) - Infrarrojo de onda larga
 - **C13**: Canal 13 (10.3 μm) - Infrarrojo limpio
-- **C14**: Canal 14 (11.2 μm) - Infrarrojo de onda larga
 - **C15**: Canal 15 (12.3 μm) - Infrarrojo sucio
 
 **Nota:** Las coordenadas geográficas (latitud/longitud) se calculan automáticamente a partir de la proyección GOES, eliminando la necesidad del producto NAV.

@@ -344,7 +344,8 @@ def detect_goes_minute_offset(data_path, first_moment_info, use_date_tree=False,
 
 
 # Productos L2 que usa el algoritmo.
-PRODUCTOS = ["ACTP", "C04", "C07", "C11", "C13", "C14", "C15"]
+# C14 (11.2 µm) no interviene en la clasificación y dejó de leerse en octubre de 2026 (P9).
+PRODUCTOS = ["ACTP", "C04", "C07", "C11", "C13", "C15"]
 
 # Nombre de un archivo L2 de ABI, por ejemplo:
 #   OR_ABI-L2-CMIPC-M6C07_G16_s20240580406173_e20240580408558_c20240580409038.nc
@@ -793,9 +794,6 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     with xr.open_dataset(file_paths["C13"]) as ds:
         c13 = ds['CMI'].data[y_slice, x_slice]
     
-    with xr.open_dataset(file_paths["C14"]) as ds:
-        c14 = ds['CMI'].data[y_slice, x_slice]
-    
     with xr.open_dataset(file_paths["C15"]) as ds:
         c15 = ds['CMI'].data[y_slice, x_slice]
     
@@ -808,7 +806,7 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     # Si alguna banda tiene NaN, el píxel se marcará como sin datos
     valid_data_mask = (
         np.isfinite(c04) & np.isfinite(c07) & np.isfinite(c11) & 
-        np.isfinite(c13) & np.isfinite(c14) & np.isfinite(c15) & 
+        np.isfinite(c13) & np.isfinite(c15) & 
         np.isfinite(phase)
     )
     
