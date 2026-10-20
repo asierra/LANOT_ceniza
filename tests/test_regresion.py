@@ -25,10 +25,7 @@ INSTANTES = ["20240580406", "20190601332", "20190601437"]
 
 @pytest.fixture(scope="module")
 def efemerides():
-    from skyfield.api import Loader
-    loader = Loader(detect_ash.SKYFIELD_DIR if hasattr(detect_ash, "SKYFIELD_DIR")
-                    else "/usr/local/share/lanot/skyfield")
-    return loader("de421.bsp"), loader.timescale()
+    return detect_ash.carga_efemerides()
 
 
 @pytest.mark.parametrize("instante", INSTANTES)

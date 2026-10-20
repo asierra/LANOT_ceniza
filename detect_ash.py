@@ -9,7 +9,7 @@ import numpy as np
 from scipy import ndimage
 from pathlib import Path
 from skyfield.api import utc
-from skyfield.api import Topos, Loader
+from skyfield.api import Loader
 import os
 import re
 
@@ -17,8 +17,32 @@ import re
 logger = logging.getLogger(__name__)
 
 
-# Ruta al directorio de datos L2
-l2_path = Path("/data/ceniza/l2")
+# Rutas. Se pueden cambiar con variables de entorno.
+#   LANOT_CENIZA_L2     carpeta de datos L2 por omisión (también con --path)
+#   LANOT_SKYFIELD_DIR  carpeta con de421.bsp. Si no se da: la compartida de LANOT si
+#                       tiene el archivo; si no, ~/.cache/lanot_ceniza, donde Skyfield lo
+#                       descarga la primera vez (~17 MB).
+l2_path = Path(os.environ.get("LANOT_CENIZA_L2", "/data/ceniza/l2"))
+SKYFIELD_LANOT = Path("/usr/local/share/lanot/skyfield")
+
+
+def carpeta_skyfield():
+    """Carpeta de las efemérides de Skyfield (ver LANOT_SKYFIELD_DIR arriba)."""
+    if os.environ.get("LANOT_SKYFIELD_DIR"):
+        return Path(os.environ["LANOT_SKYFIELD_DIR"])
+    if (SKYFIELD_LANOT / "de421.bsp").is_file():
+        return SKYFIELD_LANOT
+    return Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "lanot_ceniza"
+
+
+def carga_efemerides():
+    """Efemérides DE421 y escala de tiempo de Skyfield."""
+    carpeta = carpeta_skyfield()
+    if not (carpeta / "de421.bsp").is_file():
+        logger.info(f"No está {carpeta / 'de421.bsp'}; Skyfield lo descargará (~17 MB).")
+        carpeta.mkdir(parents=True, exist_ok=True)
+    loader = Loader(str(carpeta), verbose=False)
+    return loader("de421.bsp"), loader.timescale()
 
 # Regiones predefinidas para recorte [lon_min, lat_max, lon_max, lat_min]
 CLIP_REGIONS = {
@@ -923,7 +947,7 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
 def main():
     parser = argparse.ArgumentParser(description="Detecta ceniza volcánica a partir de datos GOES L2.")
     parser.add_argument('-p', '--path', type=Path, default=l2_path, 
-                        help=f"Ruta al directorio de datos L2. Por defecto: {l2_path}")
+                        help=f"Ruta al directorio de datos L2. Por defecto: {l2_path} (o LANOT_CENIZA_L2)")
     parser.add_argument('-m', '--instant', '--moment', dest='instant', type=str, default=None, 
                         help="Instante o rango a procesar. Formatos: 'YYYYjjjHHMM', 'YYYYMMDDHHMM', o 'YYYYMMDDHHmm-HHmm'. "
                              "Por defecto, se calcula el más reciente.")
@@ -1010,11 +1034,7 @@ def main():
     
     # Cargar recursos pesados una sola vez
     logger.debug("Cargando efemérides de Skyfield (una sola vez)...")
-    skyfield_cache = Path('/usr/local/share/lanot/skyfield')
-    skyfield_cache.mkdir(parents=True, exist_ok=True)
-    loader = Loader(skyfield_cache)
-    eph_global = loader('de421.bsp')
-    ts_global = loader.timescale()
+    eph_global, ts_global = carga_efemerides()
     
     # Contadores para estadísticas
     instantes_exitosos = 0
