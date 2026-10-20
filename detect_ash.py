@@ -11,6 +11,7 @@ from pathlib import Path
 from skyfield.api import utc
 from skyfield.api import Topos, Loader
 import os
+import re
 
 # Configurar logger
 logger = logging.getLogger(__name__)
@@ -309,109 +310,76 @@ def detect_goes_minute_offset(data_path, first_moment_info, use_date_tree=False,
     return 0
 
 
-def get_filelist_from_path(data_path, moment_info, products, use_date_tree=False, verbose=True):
+# Productos L2 que usa el algoritmo.
+PRODUCTOS = ["ACTP", "C04", "C07", "C11", "C13", "C14", "C15"]
+
+# Nombre de un archivo L2 de ABI, por ejemplo:
+#   OR_ABI-L2-CMIPC-M6C07_G16_s20240580406173_e20240580408558_c20240580409038.nc
+#   CG_ABI-L2-ACTPC-M3_G16_s20190601332133_e20190601334517_c20252920848220.nc
+# origen: OR (NOAA) o CG (CSPP Geo, local); dominio: C (CONUS), F (disco completo) o
+# P (PACUS). Deja fuera L1b, MCMIP (multibanda), mesoescala (M1/M2) y otros productos.
+_PATRON_L2 = re.compile(
+    r"^(?P<origen>OR|CG)_ABI-L2-(?P<prod>CMIP|ACTP)(?P<dom>[CFP])-M(?P<modo>\d)(?:C(?P<banda>\d{2}))?"
+    r"_(?P<sat>G\d{2})_s(?P<s>\d{14})_e\d{14}_c(?P<c>\d{14})\.nc$")
+
+
+def _producto(m):
+    """Nombre del producto ('ACTP', 'C07', ...) de un nombre de archivo ya reconocido."""
+    if m["prod"] == "ACTP":
+        return None if m["banda"] else "ACTP"
+    return f"C{m['banda']}" if m["banda"] else None
+
+
+def busca_archivos(carpeta, instante, productos=PRODUCTOS):
     """
-    Busca archivos en un directorio que coincidan con un instante 'YYYYjjjhhmm" 
-    y que contengan uno de los identificadores de 'products' en su nombre.
-    
-    Args:
-        data_path (Path): Ruta base donde buscar los archivos
-        moment_info (tuple): Tupla con (moment_julian, year, month, day).
-        products (list): Lista de productos a buscar
-        use_date_tree (bool): Si True, usa la estructura YYYY/MM/DD derivada de moment.
-        verbose (bool): Si True, imprime información detallada del proceso de búsqueda.
+    Busca en `carpeta` los archivos L2 de un instante (YYYYjjjHHMM).
+
+    Todos deben ser del mismo satélite y dominio. Si un producto está repetido, prefiere
+    CG_ (procesado en LANOT con CSPP Geo) sobre OR_, y entre iguales el de fecha de
+    creación (_c) más reciente.
+
+    Returns:
+        (dict, list): {producto: Path} con lo encontrado y la lista de productos que faltan.
+
+    Raises:
+        ValueError: si hay juegos completos de más de un satélite o dominio.
     """
-    
-    # Desempaquetar la información del instante
-    moment_julian, year, month, day = moment_info
-    
-    # Construir la ruta de búsqueda
-    if use_date_tree:
-        # Construir la ruta completa usando los componentes de fecha
-        search_path = data_path / year / month / day
+    carpeta = Path(carpeta)
+    if not carpeta.is_dir():
+        logger.debug(f"No existe la carpeta {carpeta}")
+        return {}, list(productos)
+
+    grupos = {}  # (satélite, dominio) -> producto -> [(es_cg, creación, ruta)]
+    for ruta in carpeta.glob(f"*_s{instante}*.nc"):
+        m = _PATRON_L2.match(ruta.name)
+        prod = _producto(m) if m else None
+        if prod in productos:
+            grupos.setdefault((m["sat"], m["dom"]), {}).setdefault(prod, []).append(
+                (m["origen"] == "CG", m["c"], ruta))
+
+    completos = sorted(k for k, g in grupos.items() if all(p in g for p in productos))
+    if len(completos) > 1:
+        raise ValueError(f"Instante {instante}: hay juegos completos de varios satélites o dominios en "
+                         f"{carpeta}: {', '.join(f'{sat} {dom}' for sat, dom in completos)}")
+    if completos:
+        grupo = grupos[completos[0]]
+    elif grupos:
+        grupo = max(grupos.values(), key=len)  # el más completo, para reportar lo que falta
     else:
-        search_path = data_path
-    
-    # Usar el instante en formato juliano para buscar archivos
-    # Patrón completo YYYYjjjHHMM para buscar archivos que coincidan con el instante
-    patron_base = f"*s{moment_julian}*.nc"
+        grupo = {}
 
-    if verbose:
-        logger.debug(f"Buscando archivos en: {search_path}")
-        logger.debug(f"Usando patrón base: {patron_base}")
+    elegidos = {p: max(candidatos)[2] for p, candidatos in grupo.items()}
+    for p, candidatos in grupo.items():
+        if len(candidatos) > 1:
+            logger.debug(f"{p}: {len(candidatos)} archivos, se usa {elegidos[p].name}")
+    return elegidos, [p for p in productos if p not in elegidos]
 
-    # Comprobar si el directorio existe antes de buscar
-    if not search_path.is_dir():
-        if verbose:
-            print(f"Error: El directorio '{search_path}' no existe. Por favor, comprueba la ruta.")
-        return []
-    
-    # Obtenemos *todos* los archivos que coinciden con el tiempo (patrón base)
-    archivos_por_tiempo = list(search_path.glob(patron_base))
-    
-    if verbose:
-        logger.debug(f"Encontrados {len(archivos_por_tiempo)} archivos que coinciden con el patrón de tiempo.")
-    
-    # Diccionario para agrupar archivos por producto: producto -> lista de paths
-    archivos_por_producto = {prod: [] for prod in products}
-    
-    import re
 
-    for p in archivos_por_tiempo:
-        p_name = p.name
-        for prod in products:
-            # Lógica de coincidencia para diferentes tipos de productos:
-            # - Bandas espectrales (C04, C07, etc.): buscar "M6C07_" o "CMIPC-M6C07_"
-            # - ACTP: buscar "ACTPC-" (Cloud Top Phase)
-            if prod.startswith('C'):
-                # Para bandas: admitir múltiples formatos históricos y actuales.
-                # Ejemplos en la práctica:
-                #  - OR_ABI-L2-CMIPC-M3C07_G16_s20190600802133_...  (M3)
-                #  - OR_ABI-L2-CMIPC-M6C07_G16_s...                 (M6)
-                #  - ...-C07_G16_...  (variantes)
-                # La forma más robusta es aceptar si la etiqueta de banda (ej. 'C07')
-                # aparece en el nombre del archivo en contextos razonables.
-                # Usamos una expresión regular simple para evitar coincidencias parciales raras.
-                band_code = prod  # e.g. 'C07'
-                # Buscar patrones como 'M3C07', 'M6C07', '-C07_', '_C07_', 'C07_G16', etc.
-                if re.search(rf"M\d+C{band_code[1:]}\b", p_name) or re.search(rf"[^A-Za-z0-9]{band_code}[^A-Za-z0-9]", p_name) or (band_code in p_name):
-                    archivos_por_producto[prod].append(p)
-                    break
-            elif prod == 'ACTP':
-                # Para ACTP: el archivo se llama ACTPC (con C al final)
-                if "ACTPC-" in p_name or "-ACTP_" in p_name or "-ACTPC-" in p_name or "ACTP" in p_name:
-                    archivos_por_producto[prod].append(p)
-                    break
-            else:
-                # Para otros productos: búsqueda estándar
-                if f"-{prod}_" in p_name or f"-{prod}-" in p_name or prod in p_name:
-                    archivos_por_producto[prod].append(p)
-                    break
-    
-    # Resolver duplicados: preferir CG_ sobre OR_
-    lista_archivos = []
-    for prod in products:
-        candidatos = archivos_por_producto[prod]
-        
-        if len(candidatos) == 0:
-            continue
-        elif len(candidatos) == 1:
-            lista_archivos.append(str(candidatos[0]))
-        else:
-            # Hay duplicados: preferir CG_ sobre OR_
-            cg_files = [p for p in candidatos if p.name.startswith('CG_')]
-            if cg_files:
-                lista_archivos.append(str(cg_files[0]))
-                if len(cg_files) > 1 or len(candidatos) > len(cg_files):
-                    if verbose: print(f"  Nota: Se encontraron {len(candidatos)} archivos para {prod}, usando {cg_files[0].name} (preferencia CG_)")
-            else:
-                # No hay CG_, usar el primero que encontremos
-                lista_archivos.append(str(candidatos[0]))
-                if len(candidatos) > 1:
-                    if verbose: print(f"  Nota: Se encontraron {len(candidatos)} archivos para {prod}, usando {candidatos[0].name}")
-    
-    return lista_archivos
-    
+def carpeta_del_instante(data_path, instant_info, use_date_tree=False):
+    """Carpeta donde están los archivos de un instante: data_path o data_path/AAAA/MM/DD."""
+    _, year, month, day = instant_info
+    return Path(data_path) / year / month / day if use_date_tree else Path(data_path)
+
 
 def get_sun_zenith_angle(lat_array, lon_array, image_time_dt, eph, ts):
     """
@@ -637,35 +605,13 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     else:
         bbox = None
 
-    # Si se especifica un archivo NAV, no lo buscamos en el directorio
-    # NOTA: El archivo NAV ya no es necesario, se calculan lat/lon desde la proyección
-    productos = ["ACTP", "C04", "C07", "C11", "C13", "C14", "C15"]
-    
-    archivos = get_filelist_from_path(data_path, instant_info, productos, use_date_tree=use_date_tree)
-    if not archivos:
-        print(f"Error: No se encontró ningún archivo con este instante {instant_info[0]}.")
+    carpeta = carpeta_del_instante(data_path, instant_info, use_date_tree)
+    file_paths, faltan = busca_archivos(carpeta, instant_info[0])
+    if faltan:
+        print(f"Error: faltan {', '.join(faltan)} para el instante {instant_info[0]} en {carpeta}.")
         return
-    if len(archivos) != len(productos):
-        print(f"Error: Se encontraron {len(archivos)} archivos, pero se esperaban {len(productos)}. (Instante: {instant_info[0]})")
-        return
-    
-    logger.debug(f"Se encontraron los {len(archivos)} archivos requeridos.")
-    
-    # Creamos un diccionario para almacenar las rutas de los archivos por producto.
-    file_paths = {}
-    for archivo_path in archivos:
-        # Identificamos a qué producto pertenece cada archivo
-        for prod in productos:
-            # La lógica debe coincidir con la de get_filelist_from_path
-            is_band_product = prod.startswith("C") and "CMIP" in str(archivo_path) and prod in str(archivo_path)
-            is_other_product = not prod.startswith("C") and prod in str(archivo_path) 
-
-            if is_band_product or is_other_product:
-                logger.debug(f"Asociando {prod} con: {archivo_path}")
-                file_paths[prod] = archivo_path
-                break # Pasamos al siguiente archivo una vez que encontramos su producto
-    
-    logger.debug("\n¡Éxito! Todos los productos requeridos fueron encontrados.")
+    for prod, ruta in file_paths.items():
+        logger.debug(f"{prod}: {ruta}")
 
     # Usamos xarray para abrir los archivos NetCDF
     logger.debug("\nLeyendo datos con xarray...")
@@ -1029,21 +975,21 @@ def main():
 
     # --- 2. Verificación de archivos (Pre-flight check) ---
     print("\n--- Verificando disponibilidad de archivos ---")
-    productos_requeridos = ["ACTP", "C04", "C07", "C11", "C13", "C14", "C15"]
     instantes_validos = []
     instantes_fallidos = []
 
     for instant_info in instant_list:
-        files = get_filelist_from_path(args.path, instant_info, productos_requeridos, use_date_tree=args.date_tree, verbose=args.verbose)
-        if len(files) == len(productos_requeridos):
-            instantes_validos.append(instant_info)
+        carpeta = carpeta_del_instante(args.path, instant_info, args.date_tree)
+        try:
+            _, faltan = busca_archivos(carpeta, instant_info[0])
+        except ValueError as e:
+            print(f"Error: {e}")
+            faltan = ["(ambiguo)"]
+        if faltan:
+            logger.debug(f"{instant_info[0]}: faltan {', '.join(faltan)}")
+            instantes_fallidos.append((instant_info[0], carpeta))
         else:
-            instant_julian, year, month, day = instant_info
-            if args.date_tree:
-                search_path = args.path / year / month / day
-            else:
-                search_path = args.path
-            instantes_fallidos.append((instant_julian, search_path))
+            instantes_validos.append(instant_info)
 
     # --- 3. Reportar resultados de la verificación ---
     group_and_report_failures(instantes_fallidos, verbose=args.verbose)
