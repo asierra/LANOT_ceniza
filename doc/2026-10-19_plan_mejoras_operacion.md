@@ -85,7 +85,7 @@ Primero la herramienta de comparación, porque con ella se evalúan todos los de
 - El log se llena con avisos sin importancia ("ya hay una corrida en curso", 262 de 288 líneas el 2026-10-19).
 
 **Qué (propuesta).**
-1. **Códigos de salida en `lanot-detect-ash`:** 0 = todo bien; 1 = error de procesamiento; 2 = faltan datos; 3 = error de uso. En rangos: 0 solo si todos los instantes salieron bien.
+1. **Códigos de salida en `lanot-detect-ash`:** 0 = todo bien; 1 = error de procesamiento; 2 = error de uso (el que ya usa argparse); 3 = faltan datos. En rangos: 0 solo si todos los instantes salieron bien.
 2. **CSV con estado:** columna `estado` en `latencia_ceniza.csv` (`ok`, `incompleto`, `error_cspp`, `error_ceniza`). Las fallas también quedan registradas, con los tiempos que alcanzó a tener.
 3. **Log útil:** la corrida de respaldo (x5:10) no escribe nada si la principal está en curso o ya terminó. Rotación mensual de `procesa.log` (logrotate o el propio script).
 4. **Vigilante** `operacion/vigila_ceniza.sh`, cada 15 min por cron:

@@ -12,9 +12,16 @@ from skyfield.api import utc
 from skyfield.api import Loader
 import os
 import re
+import sys
 
 # Configurar logger
 logger = logging.getLogger(__name__)
+
+# Códigos de salida de lanot-detect-ash (los usa operacion/procesa_ceniza.sh).
+SALIDA_OK = 0
+SALIDA_ERROR = 1        # error al procesar algún instante
+SALIDA_USO = 2          # argumentos inválidos (el mismo código que usa argparse)
+SALIDA_SIN_DATOS = 3    # faltan archivos para algún instante
 
 
 # Rutas. Se pueden cambiar con variables de entorno.
@@ -618,8 +625,7 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
             base_region = clip_region
         
         if base_region not in CLIP_REGIONS:
-            print(f"Error: Región '{base_region}' no reconocida. Regiones disponibles: {list(CLIP_REGIONS.keys())}")
-            return
+            raise ValueError(f"Región '{base_region}' no reconocida. Regiones disponibles: {list(CLIP_REGIONS.keys())}")
         
         bbox = CLIP_REGIONS[base_region]
         if reproject_to_geo:
@@ -632,8 +638,7 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     carpeta = carpeta_del_instante(data_path, instant_info, use_date_tree)
     file_paths, faltan = busca_archivos(carpeta, instant_info[0])
     if faltan:
-        print(f"Error: faltan {', '.join(faltan)} para el instante {instant_info[0]} en {carpeta}.")
-        return
+        raise FileNotFoundError(f"Faltan {', '.join(faltan)} para el instante {instant_info[0]} en {carpeta}.")
     for prod, ruta in file_paths.items():
         logger.debug(f"{prod}: {ruta}")
 
@@ -979,7 +984,7 @@ def main():
             instant_list = parse_moment_string(args.instant)
         except ValueError as e:
             print(f"Error: {e}")
-            exit(1)
+            sys.exit(SALIDA_USO)
     else:
         instant_list = [normalize_moment(get_moment())]
 
@@ -1023,11 +1028,11 @@ def main():
     
     if not instantes_validos:
         logger.info("\nNo se encontraron datos completos para ningún instante en el rango especificado. Terminando.")
-        exit(0)
+        sys.exit(SALIDA_SIN_DATOS)
 
     if args.dry_run:
         logger.info("\nModo 'dry-run' activado. No se realizará ningún procesamiento. Terminando.")
-        exit(0)
+        sys.exit(SALIDA_SIN_DATOS if instantes_fallidos else SALIDA_OK)
 
     # --- 4. Procesar instantes válidos ---
     logger.info(f"\n--- Iniciando procesamiento para {len(instantes_validos)} instantes válidos ---")
@@ -1100,6 +1105,11 @@ def main():
     logger.info(f"Instantes procesados exitosamente: {instantes_exitosos} de {len(instantes_validos)}")
     if instantes_con_error > 0:
         logger.info(f"Instantes con error: {instantes_con_error}")
+    if instantes_con_error:
+        sys.exit(SALIDA_ERROR)
+    if instantes_fallidos:
+        sys.exit(SALIDA_SIN_DATOS)
+    sys.exit(SALIDA_OK)
 
 if __name__ == "__main__":
     main()

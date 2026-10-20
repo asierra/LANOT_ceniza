@@ -5,7 +5,7 @@
 1. Lee las L1b CONUS que cirrus trae de la estación (`/data1/input/abi/l1b/conus`, que es el `/data` de cirrus montado en tahan).
 2. Corre CSPP Geo AIT solo con `cmi,acm,actp` y en 4 segmentos (`--max-segment-rows 375`). Usa el caché dinámico de cirrus (`/data1/aitf_2_3_cache`) y un caché temporal propio (`/data/ceniza/oper/aitf_temporal_cache`).
 3. Corre `lanot-detect-ash` recortado a la región del artículo en lat/lon (`--clip ashpapergeo`), y deja el GeoTIFF en `/data/ceniza/oper/ashpapergeo/`. Con `RECORTE=` (vacío) genera en su lugar el CONUS completo en proyección GOES, en `/data/ceniza/oper/conus/` (~9 s más por escaneo; el recorte tarda ~0.5 s).
-4. Agrega a `/data/ceniza/oper/latencia_ceniza.csv` el tiempo de cada paso y la latencia total desde el inicio del escaneo.
+4. Agrega a `/data/ceniza/oper/latencia_ceniza.csv` el tiempo de cada paso, la latencia total desde el inicio del escaneo y el estado del intento (`ok`, `incompleto`, `error_cspp`, `error_ceniza`).
 
 ## Instalación
 
@@ -38,7 +38,7 @@ cd ~/src/LANOT_ceniza && git pull && operacion/instala.sh
 | CSPP Geo AIT 2.3.1 | `~lanotadm/csppgeo/cspp-geo-aitf-2.3` | `AITF_DIR` |
 | L1b CONUS | `/data1/input/abi/l1b/conus` | `L1B_DIR` |
 | Caché dinámico de CSPP | `/data1/aitf_2_3_cache` | `CSPP_GEO_AITF_CACHE` |
-| Efemérides de Skyfield | `/usr/local/share/lanot/skyfield/de421.bsp` | — (no están en el repo; `instala.sh` dice cómo descargarlas si faltan) |
+| Efemérides de Skyfield | `/usr/local/share/lanot/skyfield/de421.bsp` | `LANOT_SKYFIELD_DIR` (no están en el repo; `instala.sh` dice cómo descargarlas si faltan) |
 | Directorio de trabajo y salida | `/data/ceniza/oper` (grupo `ash`) | `BASE`, `SALIDA` |
 | Región del recorte | `ashpapergeo` (las regiones están en `detect_ash.py`) | `RECORTE` |
 
@@ -55,7 +55,29 @@ La primera corrida con el caché temporal vacío funciona, pero la máscara de n
 
 ## Cron
 
-Ver `crontab.ejemplo`. cirrus trae las L1b a las x4:20 (llegan a la estación entre x4:10 y x4:15); la ceniza corre a las x4:30, con una segunda corrida de respaldo a las x5:10 para escaneos que lleguen tarde. Si un escaneo ya se procesó, el script sale sin hacer nada.
+Ver `crontab.ejemplo`. cirrus trae las L1b a las x4:20 (llegan a la estación entre x4:10 y x4:15); la ceniza corre a las x4:30, con una segunda corrida de respaldo a las x5:10 para escaneos que lleguen tarde. Si un escaneo ya se procesó o está en curso, el script sale sin escribir nada.
+
+## Fallas y vigilancia
+
+En tahan no hay correo (crontab con `MAILTO=""`, sin `mail` ni postfix), igual que en la cadena polar: todo queda en logs y archivos de estado.
+
+| qué | dónde |
+|---|---|
+| log de cada corrida | `/var/log/lanot/ceniza/procesa_AAAAMM.log` (uno por mes; se borran a los ~6 meses). Solo registra productos y errores. Desde una terminal, la salida se queda en pantalla. |
+| intentos por escaneo | `latencia_ceniza.csv`, columna `estado`. Un escaneo puede tener varias líneas (por ejemplo, `incompleto` y luego `ok` en la corrida de respaldo); cuenta la última. |
+| carpetas de trabajo | `/data/ceniza/oper/tmp/conus-s*`: las de corridas exitosas se borran a la hora; las fallidas (archivo `FALLO`) se conservan un día, con `aitf.out` y `ceniza.out`. |
+| estado actual | `/data/ceniza/oper/state/estado.json`, que `vigila_ceniza.sh` reescribe cada 15 min. |
+| cambios de estado | `/data/ceniza/oper/state/eventos.log`: una línea solo cuando el estado o la lista de fallas cambia. **Es lo que hay que revisar.** |
+
+`vigila_ceniza.sh` marca falla si en la última hora:
+- el GeoTIFF más reciente tiene más de 15 min (`sin_producto`);
+- hay escaneos con las 16 bandas y sin GeoTIFF (`escaneos_perdidos`);
+- algún escaneo terminó en error (`errores`);
+- el p95 de la latencia pasa de 6 min (`latencia_alta`).
+
+Los umbrales se cambian con `MAX_EDAD_MIN` y `MAX_P95_S`. Para agregar después un aviso por correo o mensajería, basta con leer `eventos.log`.
+
+`lanot-detect-ash` termina con código 0 si todo salió bien, 1 si hubo un error de procesamiento, 2 si los argumentos son inválidos y 3 si faltan datos.
 
 ## Prueba del 2026-10-18 (escaneo de 21:31 UTC)
 

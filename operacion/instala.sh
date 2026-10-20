@@ -6,7 +6,7 @@
 # DESTINO (por omisión /opt/lanot/ceniza) queda así:
 #   .venv/                ambiente propio, creado con el Python del sistema (sin conda ni
 #                         cuentas personales), con el paquete y sus dependencias
-#   operacion/            procesa_ceniza.sh, crontab.ejemplo y README.md
+#   operacion/            procesa_ceniza.sh, vigila_ceniza.sh, crontab.ejemplo y README.md
 #   VERSION               commit del que se instaló
 #
 # El clon puede estar en un home privado: DESTINO no depende de él después de instalar.
@@ -36,7 +36,7 @@ fi
 "$DESTINO/.venv/bin/pip" install -q "$RAIZ"          # dependencias que falten
 
 mkdir -p "$DESTINO/operacion"
-install -m 0775 "$RAIZ/operacion/procesa_ceniza.sh" "$DESTINO/operacion/"
+install -m 0775 "$RAIZ/operacion/procesa_ceniza.sh" "$RAIZ/operacion/vigila_ceniza.sh" "$DESTINO/operacion/"
 install -m 0664 "$RAIZ/operacion/crontab.ejemplo" "$RAIZ/operacion/README.md" "$DESTINO/operacion/"
 git -C "$RAIZ" describe --always --dirty --tags > "$DESTINO/VERSION" 2>/dev/null || echo desconocida > "$DESTINO/VERSION"
 
