@@ -10,8 +10,6 @@ from scipy import ndimage
 from pathlib import Path
 from skyfield.api import utc
 from skyfield.api import Topos, Loader
-from concurrent.futures import ProcessPoolExecutor
-import multiprocessing
 import os
 
 # Configurar logger
@@ -20,10 +18,6 @@ logger = logging.getLogger(__name__)
 
 # Ruta al directorio de datos L2
 l2_path = Path("/data/ceniza/l2")
-
-# Procesos para la desviación estándar del kernel. None = todos los núcleos menos 2.
-# Se fija con --jobs o con la variable de entorno LANOT_CENIZA_JOBS.
-N_JOBS = int(os.environ["LANOT_CENIZA_JOBS"]) if os.environ.get("LANOT_CENIZA_JOBS") else None
 
 # Regiones predefinidas para recorte [lon_min, lat_max, lon_max, lat_min]
 CLIP_REGIONS = {
@@ -475,116 +469,42 @@ def get_sun_zenith_angle(lat_array, lon_array, image_time_dt, eph, ts):
     return sza_array
 
 
-def _process_block_std(args):
+def genera_media_dst(arreglo, kernel_size=5):
     """
-    Función auxiliar para procesar un bloque del array en paralelo.
-    Calcula la desviación estándar local para un bloque específico.
-    """
-    block, kernel_size = args
-    return ndimage.generic_filter(
-        block,
-        np.nanstd,
-        size=kernel_size,
-        mode='constant',
-        cval=np.nan
-    )
+    Media y desviación estándar local (ventana cuadrada de kernel_size), ignorando NaN.
 
-
-def genera_media_dst(arreglo, kernel_size=5, n_jobs=None):
-    """
-    Calcula la media y la desviación estándar local (kernel) de un arreglo, ignorando NaNs.
-
-    Para la media, utiliza un método optimizado con uniform_filter para mayor rendimiento.
-    Para la desviación estándar, utiliza procesamiento paralelo dividiendo el array en bloques.
+    Equivale a generic_filter con np.nanmean y np.nanstd (ddof=0, ventana recortada en
+    los bordes), pero con filtros uniformes sobre x, x² y el conteo de valores válidos:
+    var = E[x²] - E[x]². Se calcula en float64 para que la resta no pierda precisión.
+    Las ventanas sin ningún valor válido dan NaN.
 
     Args:
-        arreglo (np.ndarray): El arreglo de entrada, puede contener NaNs.
-        kernel_size (int): El tamaño de la ventana cuadrada para el cálculo.
-        n_jobs (int, optional): Número de procesos paralelos. Si es None, usa todos los cores disponibles.
+        arreglo (np.ndarray): arreglo 2D, puede contener NaN.
+        kernel_size (int): lado de la ventana.
 
     Returns:
-        tuple[np.ndarray, np.ndarray]: Una tupla conteniendo el arreglo de medias locales
-                                       y el arreglo de desviaciones estándar locales.
+        tuple[np.ndarray, np.ndarray]: medias y desviaciones locales, en el dtype de entrada.
     """
-    # --- Media (Método optimizado para manejar NaNs) ---
-    # 1. Copia del arreglo con NaNs reemplazados por 0
-    V = arreglo.copy()
-    V[np.isnan(V)] = 0
-    # 2. Suma local usando el filtro uniforme (muy rápido)
-    suma_local = ndimage.uniform_filter(V, size=kernel_size, mode='constant', cval=0) * (kernel_size**2)
+    validos = np.isfinite(arreglo)
+    x = np.where(validos, arreglo, 0).astype(np.float64)
 
-    # 3. Arreglo para contar los elementos no-NaN en la ventana
-    N = np.ones(arreglo.shape)
-    N[np.isnan(arreglo)] = 0
-    # 4. Conteo local de elementos no-NaN
-    conteo_local = ndimage.uniform_filter(N, size=kernel_size, mode='constant', cval=0) * (kernel_size**2)
-    
-    # 5. Calcular la media, evitando división por cero
-    kernel_media = np.divide(suma_local, conteo_local, where=conteo_local!=0, out=np.full(arreglo.shape, np.nan))
+    def suma_local(v):
+        return ndimage.uniform_filter(v, size=kernel_size, mode='constant', cval=0.0) * kernel_size**2
 
-    # --- Desviación Estándar (usando procesamiento paralelo) ---
-    if n_jobs is None:
-        n_jobs = N_JOBS
-    if n_jobs is None:
-        n_jobs = max(1, multiprocessing.cpu_count() - 2)  # Dejar 2 cores libres
-    
-    # Si el array es pequeño o n_jobs=1, usar procesamiento secuencial
-    if n_jobs == 1 or arreglo.size < 1000000:  # < 1M píxeles
-        kernel_std = ndimage.generic_filter(
-            arreglo, 
-            np.nanstd, 
-            size=kernel_size,
-            mode='constant',
-            cval=np.nan
-        )
-    else:
-        # Dividir el array en bloques horizontales con overlap
-        rows, cols = arreglo.shape
-        overlap = kernel_size // 2
-        
-        # Calcular número óptimo de bloques (uno por proceso)
-        n_blocks = min(n_jobs, rows // (kernel_size * 10))  # Bloques no muy pequeños
-        n_blocks = max(1, n_blocks)
-        
-        rows_per_block = rows // n_blocks
-        
-        blocks = []
-        indices = []
-        
-        for i in range(n_blocks):
-            start_row = i * rows_per_block
-            if i == n_blocks - 1:
-                end_row = rows
-            else:
-                end_row = (i + 1) * rows_per_block
-            
-            # Agregar overlap para evitar problemas en los bordes
-            block_start = max(0, start_row - overlap)
-            block_end = min(rows, end_row + overlap)
-            
-            block = arreglo[block_start:block_end, :]
-            blocks.append((block, kernel_size))
-            indices.append((start_row, end_row, block_start))
-        
-        # Procesar bloques en paralelo
-        with ProcessPoolExecutor(max_workers=n_jobs) as executor:
-            results = list(executor.map(_process_block_std, blocks))
-        
-        # Ensamblar los resultados
-        kernel_std = np.empty(arreglo.shape, dtype=arreglo.dtype)
-        for i, result in enumerate(results):
-            start_row, end_row, block_start = indices[i]
-            offset = start_row - block_start
-            result_slice = result[offset:offset + (end_row - start_row), :]
-            kernel_std[start_row:end_row, :] = result_slice
-    
-    logger.debug(f"\n--- Resultados del Kernel ({kernel_size}x{kernel_size}) ---")
-    logger.debug(f"Forma del array de Media: {kernel_media.shape}")
-    logger.debug(f"Forma del array de Desv. Estándar: {kernel_std.shape}")
-    if n_jobs > 1:
-        logger.debug(f"Procesamiento paralelo con {n_jobs} procesos")
+    n = suma_local(validos.astype(np.float64))
+    s1 = suma_local(x)
+    s2 = suma_local(x * x)
 
-    return kernel_media, kernel_std
+    # uniform_filter acumula sumas: cuando la ventana tiene datos, n es un entero salvo
+    # error de redondeo; con n < 0.5 la ventana no tiene datos.
+    hay_datos = n > 0.5
+    with np.errstate(invalid='ignore', divide='ignore'):
+        media = np.where(hay_datos, s1 / n, np.nan)
+        var = np.where(hay_datos, s2 / n - media * media, np.nan)
+    dst = np.sqrt(np.maximum(var, 0.0, where=hay_datos, out=var))
+
+    logger.debug(f"Kernel {kernel_size}x{kernel_size}: media y desviación de forma {media.shape}")
+    return media.astype(arreglo.dtype, copy=False), dst.astype(arreglo.dtype, copy=False)
 
 
 def classify_ash(c04, c07, c11, c13, c15, phase, sza, valid_data_mask, kernel_size=5) -> np.ndarray:
@@ -1075,15 +995,9 @@ def main():
     parser.add_argument('-v', '--verbose', action='store_true',
                         help="Modo verbose: muestra información detallada del procesamiento. "
                              "Por defecto, solo se muestran mensajes esenciales de progreso.")
-    
-    parser.add_argument('-j', '--jobs', type=int, default=None,
-                        help="Procesos para el kernel estadístico. Por defecto, LANOT_CENIZA_JOBS "
-                             "o todos los núcleos menos 2.")
+
 
     args = parser.parse_args()
-    if args.jobs is not None:
-        global N_JOBS
-        N_JOBS = max(1, args.jobs)
     
     # Configurar nivel de logging según --verbose
     log_level = logging.DEBUG if args.verbose else logging.INFO

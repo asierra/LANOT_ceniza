@@ -4,7 +4,7 @@
 
 1. Lee las L1b CONUS que cirrus trae de la estación (`/data1/input/abi/l1b/conus`, que es el `/data` de cirrus montado en tahan).
 2. Corre CSPP Geo AIT solo con `cmi,acm,actp` y en 4 segmentos (`--max-segment-rows 375`). Usa el caché dinámico de cirrus (`/data1/aitf_2_3_cache`) y un caché temporal propio (`/data/ceniza/oper/aitf_temporal_cache`).
-3. Corre `lanot-detect-ash` con 16 procesos, recortado a la región del artículo en lat/lon (`--clip ashpapergeo`), y deja el GeoTIFF en `/data/ceniza/oper/ashpapergeo/`. Con `RECORTE=` (vacío) genera en su lugar el CONUS completo en proyección GOES, en `/data/ceniza/oper/conus/` (~9 s más por escaneo; el recorte tarda ~0.5 s).
+3. Corre `lanot-detect-ash` recortado a la región del artículo en lat/lon (`--clip ashpapergeo`), y deja el GeoTIFF en `/data/ceniza/oper/ashpapergeo/`. Con `RECORTE=` (vacío) genera en su lugar el CONUS completo en proyección GOES, en `/data/ceniza/oper/conus/` (~9 s más por escaneo; el recorte tarda ~0.5 s).
 4. Agrega a `/data/ceniza/oper/latencia_ceniza.csv` el tiempo de cada paso y la latencia total desde el inicio del escaneo.
 
 ## Instalación
@@ -66,5 +66,5 @@ Ver `crontab.ejemplo`. cirrus trae las L1b a las x4:20 (llegan a la estación en
 
 - Ceniza idéntica, píxel por píxel, a la calculada con las L2 completas de cirrus.
 - ACM idéntico; ACTP con 1 píxel distinto de 3.75 millones.
-- `--jobs 16` da el mismo resultado y el mismo tiempo que los 62 procesos por omisión; con 8 sube a 15 s.
+- `--jobs 16` da el mismo resultado y el mismo tiempo que los 62 procesos por omisión; con 8 sube a 15 s. (La opción se eliminó el 2026-10-19 al vectorizar el kernel.)
 - Latencia esperada en operación: ~4.8 min desde el inicio del escaneo (~8.3 min en cirrus).

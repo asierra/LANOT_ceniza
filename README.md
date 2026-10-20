@@ -127,7 +127,6 @@ lanot-detect-ash --instant 20191001731 --clip popocatepetlgeo --output /data/res
   - `popocatepetl`: Región del Popocatépetl (proyección GOES nativa)
   - `popocatepetlgeo`: Región del Popocatépetl (reproyectado a lat/lon EPSG:4326)
 - `--png`: Genera también una imagen PNG a color con mapa base, fecha/hora y logo LANOT
-- `--jobs`: Número de procesos para el kernel estadístico. Por omisión usa la variable de entorno `LANOT_CENIZA_JOBS` o, si no está definida, todos los núcleos menos 2
 
 ### Ejemplos de uso
 
@@ -170,14 +169,10 @@ El recorte se realiza **antes** de procesar los datos, mejorando significativame
 
 ### Rendimiento
 
-El sistema está optimizado para procesamiento paralelo en servidores con múltiples cores:
+El cálculo más costoso, la desviación estándar local del kernel 5×5, usa filtros uniformes sobre x, x² y el conteo de valores válidos, sin procesos en paralelo (desde octubre de 2026; antes usaba `generic_filter` repartido entre todos los núcleos).
 
-- **Dominio completo CONUS** (~5000x3000 píxeles): **~8 segundos** en servidor con 64 cores
-- **Recortes regionales** (< 1M píxeles): Procesamiento secuencial optimizado
-- **Paralelización automática**: Detecta y utiliza cores disponibles (deja 2 libres por defecto)
-- **Escalabilidad**: El rendimiento mejora linealmente con el número de cores disponibles
-
-El procesamiento paralelo se aplica automáticamente a la operación más costosa (cálculo de desviación estándar local) cuando el dominio es lo suficientemente grande.
+- **Dominio completo CONUS** (1500×2500 píxeles): unos segundos por escena, casi todo lectura de archivos.
+- **Recortes regionales**: los datos se recortan antes de leerse, así que el tiempo baja con el tamaño de la región.
 
 ### Salida
 
@@ -383,13 +378,8 @@ Este enfoque minimiza el uso de memoria y acelera significativamente el procesam
 
 ### Optimización de rendimiento
 
-- **Procesamiento paralelo automático**: El cálculo de desviación estándar local (operación más costosa) se paraleliza automáticamente en sistemas con múltiples cores
+- **Kernel vectorizado**: media y desviación estándar locales con filtros uniformes, sin llamadas a Python por píxel ni procesos en paralelo
 - **Recorte eficiente**: Los datos se recortan antes de ser procesados, cargando solo la región de interés desde los archivos NetCDF
-- **Umbral de paralelización**: Arrays con >1M píxeles utilizan procesamiento paralelo; arrays menores usan procesamiento secuencial optimizado
-- **Gestión de recursos**: Por defecto, el sistema utiliza todos los cores disponibles menos 2 (reservados para el sistema operativo)
-- **División inteligente**: El array se divide en bloques horizontales con overlap para evitar artefactos en los bordes
-
-El rendimiento escala linealmente con el número de cores disponibles, permitiendo procesamiento casi en tiempo real en servidores de alto rendimiento.
 
 ## Licencia
 

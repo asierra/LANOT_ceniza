@@ -25,10 +25,6 @@ INSTALACION=${INSTALACION:-/opt/lanot/ceniza}          # donde instala operacion
 CENIZA=$INSTALACION/.venv/bin/lanot-detect-ash
 AITF_DIR=${AITF_DIR:-$HOME/csppgeo/cspp-geo-aitf-2.3}  # CSPP Geo AIT 2.3.1
 
-# Procesos del kernel estadístico: en tahan, 16 tardan lo mismo que 62 (9 s) y dejan
-# libre el resto de la máquina para la cadena polar.
-export LANOT_CENIZA_JOBS=${LANOT_CENIZA_JOBS:-16}
-
 export PATH=$AITF_DIR:$PATH
 export CSPP_GEO_AITF_CACHE=${CSPP_GEO_AITF_CACHE:-/data1/aitf_2_3_cache}   # lo mantiene al día el cron de cirrus
 export CSPP_GEO_AITF_ANCIL_TIMEOUT=7200
