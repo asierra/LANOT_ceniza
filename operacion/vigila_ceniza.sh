@@ -8,7 +8,7 @@
 #
 # Fallas:
 #   sin_producto      el GeoTIFF más reciente tiene más de MAX_EDAD_MIN minutos
-#   escaneos_perdidos escaneos de la última hora con las 16 bandas y sin GeoTIFF
+#   escaneos_perdidos escaneos de la última hora con las 16 bandas y sin intento exitoso en el CSV
 #   errores           escaneos de la última hora cuyo último intento en el CSV no fue ok
 #   latencia_alta     p95 de la latencia de la última hora mayor que MAX_P95_S
 #
@@ -38,14 +38,17 @@ else
     fallas+=("sin_producto")
 fi
 
-# Escaneos de la última hora (inicio entre hace 65 y hace 10 min) con C16 y sin GeoTIFF
+# Escaneos de la última hora (inicio entre hace 65 y hace 10 min) con C16 y sin línea "ok"
+# en el CSV. Se usa el CSV y no la carpeta de salida para que un cambio de RECORTE o de
+# SALIDA no haga parecer perdidos los escaneos anteriores.
 perdidos=()
+exitosos=$(awk -F, 'NR > 1 && ($NF == "ok" || NF == 5) { print $1 }' "$CSV" 2>/dev/null | sort -u)
 if [ -d "$L1B_DIR" ]; then
     desde=$(date -u -d @$((ahora - 65 * 60)) +%Y%j%H%M)
     hasta=$(date -u -d @$((ahora - 10 * 60)) +%Y%j%H%M)
     for id in $(ls "$L1B_DIR" | grep C16 | grep -o '_s[0-9]\{11\}' | cut -c3- | sort -u); do
         [[ "$id" > "$desde" || "$id" == "$desde" ]] && [[ "$id" < "$hasta" || "$id" == "$hasta" ]] || continue
-        ls "$SALIDA"/ceniza_${id}*.tif >/dev/null 2>&1 || perdidos+=("s$id")
+        grep -qx "s$id" <<< "$exitosos" || perdidos+=("s$id")
     done
 fi
 [ ${#perdidos[@]} -gt 0 ] && fallas+=("escaneos_perdidos")
