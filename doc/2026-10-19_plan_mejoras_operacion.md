@@ -1,7 +1,7 @@
 # Plan de mejoras para la operación de `detect_ash.py`
 
 - **Fecha:** 2026-10-19
-- **Estado:** aprobado el 2026-10-19. Fases 0 y 1 implementadas el mismo día (ver "Seguimiento" al final); fases 2 y 3 pendientes.
+- **Estado:** aprobado el 2026-10-19. Fases 0 y 1 implementadas el mismo día (ver "Seguimiento" al final); de la fase 2, P7 en curso; el resto de las fases 2 y 3, pendiente.
 - **Rama:** `operacion-tahan`
 
 ## Contexto
@@ -239,4 +239,5 @@ El prototipo de referencia usaba las clases 4 y 5 para HAP y LAP con agua líqui
 | P2 | `aa57f3c` | mismos 63/63 instantes completos en la muestra de 2019 y 2024 |
 | P3 | `8ee5257` | |
 | P4 | `3073b65` | códigos de salida: 0 bien, 1 error, 2 uso, 3 faltan datos |
-| P5 | (commit de limpieza) | README, `compare_ash.py`, sin `requirements.txt`; matplotlib opcional; este documento y `2026-10-18_operacion_tahan.md` |
+| P5 | `8196b08` | README, `compare_ash.py`, sin `requirements.txt`; matplotlib opcional; este documento y `2026-10-18_operacion_tahan.md` |
+| P7 (0 y `.qml`) | (este commit) | sin ceniza = 0, sin datos = 255, `.qml` junto a cada GeoTIFF; probado en QGIS 3.44 LTR |

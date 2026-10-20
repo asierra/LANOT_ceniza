@@ -63,17 +63,44 @@ CLIP_REGIONS = {
     'ashpaper': [-102.418,22.474,-96.294,17.547],
 }
 
-# Paleta de colores para clasificación de ceniza (RGB)
-# El valor 0 se remapea a 255 (NoData) antes de guardar el GeoTIFF
-ASH_COLORS = {
-    0: (0, 0, 0),       # clear - negro
-    1: (255, 0, 0),     # ash - rojo
-    2: (255, 165, 0),   # probable - naranja
-    3: (255, 255, 0),   # posible - amarillo
-    4: (0, 255, 0),     # cloud - verde
-    5: (0, 0, 255),     # noise - azul
-    255: (0, 0, 0)      # nodata / clear remapped - negro
+# Valores de la clasificación en el GeoTIFF: (color RGB, nombre en la leyenda, alfa en QGIS).
+# 4 y 5 los usaban versiones anteriores (TeraScan; ver ash.cpt) y quedan reservados: no se
+# producen, pero conservan su color por si vuelven.
+SIN_DATOS = 255
+CLASES = {
+    0: ((0, 0, 0), "sin ceniza", 0),
+    1: ((255, 0, 0), "ceniza confirmada", 255),
+    2: ((255, 165, 0), "probabilidad alta", 255),
+    3: ((255, 255, 0), "probabilidad baja", 255),
+    4: ((0, 255, 0), "reservado: HAP sobre agua líquida", 255),
+    5: ((0, 0, 255), "reservado: LAP sobre agua líquida", 255),
 }
+CLASES_EN_LEYENDA = [0, 1, 2, 3]
+ASH_COLORS = {v: rgb for v, (rgb, _, _) in CLASES.items()} | {SIN_DATOS: (0, 0, 0)}
+
+
+def estilo_qml():
+    """
+    Estilo de QGIS para el GeoTIFF de ceniza. La paleta de un TIFF no guarda transparencia,
+    así que sin este estilo QGIS dibuja el 0 (sin ceniza) en negro; con él, el 0 queda
+    transparente y la leyenda muestra solo las clases en uso. QGIS lo carga solo si está
+    junto al GeoTIFF con el mismo nombre (ceniza_X.tif y ceniza_X.qml).
+    """
+    entradas = "\n".join(
+        f'        <paletteEntry value="{v}" color="#{r:02x}{g:02x}{b:02x}" alpha="{a}" label="{nombre}"/>'
+        for v in CLASES_EN_LEYENDA for (r, g, b), nombre, a in [CLASES[v]])
+    return f"""<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
+<qgis version="3.44" styleCategories="Symbology">
+  <pipe>
+    <rasterrenderer type="paletted" band="1" opacity="1" alphaBand="-1">
+      <colorPalette>
+{entradas}
+      </colorPalette>
+    </rasterrenderer>
+  </pipe>
+</qgis>
+"""
+
 
 # Generar versiones "geo" de las regiones automáticamente
 CLIP_REGIONS_WITH_GEO = CLIP_REGIONS.copy()
@@ -580,7 +607,8 @@ def classify_ash(c04, c07, c11, c13, c15, phase, sza, valid_data_mask, kernel_si
     return ceniza
 
 
-def process_instant(data_path, instant_info, output_path, clip_region=None, use_date_tree=False, eph=None, ts=None):
+def process_instant(data_path, instant_info, output_path, clip_region=None, use_date_tree=False, eph=None, ts=None,
+                    escribe_qml=True):
     """Procesa un instante: lee los datos GOES L2, clasifica ceniza y guarda el GeoTIFF."""
     logger.debug(f"Iniciando detección para el instante: {instant_info[0]}")
     
@@ -874,14 +902,10 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
 
     logger.debug(f"\nGuardando resultado en: {output_path}")
     
-    # Usar los datos del output_da (que pueden estar reproyectados)
+    # Usar los datos del output_da (que pueden estar reproyectados).
+    # 0 = sin ceniza, 1-3 = clases, 255 = sin datos (NoData).
     data_to_save = output_da.values.astype(np.uint8)
-    
-    # Todo lo que era 0 (sin detección) ahora será 255 (NoData)
-    data_to_save[data_to_save == 0] = 255
-
-    # Generar tabla de colores (RGB) para el GeoTIFF
-    color_table = {val: rgb for val, rgb in ASH_COLORS.items()}
+    color_table = dict(ASH_COLORS)
 
     height, width = data_to_save.shape
     
@@ -906,7 +930,9 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     ) as dst:
         dst.write_colormap(1, color_table)
         dst.write(data_to_save, 1)
-    
+
+    if escribe_qml:
+        Path(output_path).with_suffix(".qml").write_text(estilo_qml())
     logger.info(f"GeoTIFF guardado: {Path(output_path).resolve()}")
 
 def main():
@@ -927,6 +953,8 @@ def main():
     parser.add_argument('--dry-run', action='store_true',
                         help="Realiza una verificación de archivos para el instante o rango especificado sin procesar los datos. "
                              "Informa qué instantes tienen datos completos y cuáles no.")
+    parser.add_argument('--sin-qml', action='store_true',
+                        help="No escribir el estilo de QGIS (.qml) junto al GeoTIFF.")
     parser.add_argument('-v', '--verbose', action='store_true',
                         help="Modo verbose: muestra información detallada del procesamiento. "
                              "Por defecto, solo se muestran mensajes esenciales de progreso.")
@@ -1051,7 +1079,8 @@ def main():
                 clip_region=args.clip,
                 use_date_tree=args.date_tree,
                 eph=eph_global,
-                ts=ts_global
+                ts=ts_global,
+                escribe_qml=not args.sin_qml,
             )
             instantes_exitosos += 1
         except Exception:

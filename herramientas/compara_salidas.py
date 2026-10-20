@@ -12,6 +12,8 @@ Lee los dos formatos que ha tenido la salida:
 - 1 banda con valores de clase (desde mayo de 2026);
 - RGBA de 4 bandas (diciembre de 2025): se decodifica por color. Ahí "sin ceniza" y
   "sin datos" son ambos transparentes y se cuentan como 0.
+Entre mayo y octubre de 2026 el "sin ceniza" (0) se guardaba como 255. Para comparar esas
+salidas con las de ahora, --une-sin-ceniza cuenta 0 y 255 juntos (como en RGBA).
 Si las rejillas no coinciden, B se remuestrea a la de A (vecino más cercano).
 """
 import argparse
@@ -65,6 +67,8 @@ def main():
     ap.add_argument("a", type=Path)
     ap.add_argument("b", type=Path)
     ap.add_argument("--detalle", action="store_true", help="una línea por instante, aunque no haya diferencias")
+    ap.add_argument("--une-sin-ceniza", action="store_true",
+                    help="cuenta 'sin ceniza' (0) y 'sin datos' (255) como lo mismo")
     args = ap.parse_args()
 
     A, B = por_instante(args.a), por_instante(args.b)
@@ -83,7 +87,7 @@ def main():
         ca, pa, ra = lee(A[inst])
         cb, pb, rb = lee(B[inst])
         cb = a_rejilla(cb, pb, pa)
-        if ra or rb:  # en RGBA, sin ceniza y sin datos no se distinguen
+        if ra or rb or args.une_sin_ceniza:  # en RGBA, sin ceniza y sin datos no se distinguen
             rgba_visto = True
             ca = np.where(ca == 255, 0, ca)
             cb = np.where(cb == 255, 0, cb)
@@ -102,7 +106,7 @@ def main():
     usadas = [i for i, c in enumerate(CLASES) if total[i].sum() or total[:, i].sum()]
     print(f"\n{len(comunes)} instantes comparados; {len(distintos)} con diferencias.")
     if rgba_visto:
-        print("(Hay salidas RGBA: 'sin ceniza' y 'sin datos' se cuentan juntos como 0.)")
+        print("('sin ceniza' y 'sin datos' se cuentan juntos como 0: hay salidas RGBA o se pidió --une-sin-ceniza.)")
     print("\nMatriz de confusión (filas A, columnas B), todos los instantes:")
     print(" " * 12 + "".join(f"{NOMBRES[CLASES[j]]:>12s}" for j in usadas))
     for i in usadas:

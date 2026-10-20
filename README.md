@@ -132,6 +132,7 @@ lanot-detect-ash --instant 20191001731 --clip popocatepetlgeo --output /data/res
   - `popocatepetlgeo`: Región del Popocatépetl (reproyectado a lat/lon EPSG:4326)
   - `ashpaper`, `ashpapergeo`: Región del artículo (la que usa la operación en tahan)
 - `--dry-run`: Solo revisa qué instantes tienen todos los archivos
+- `--sin-qml`: No escribe el estilo de QGIS junto al GeoTIFF
 - `--verbose` / `-v`: Mensajes detallados
 
 ### Ejemplos de uso
@@ -176,16 +177,18 @@ El cálculo más costoso, la desviación estándar local del kernel 5×5, usa fi
 
 ### Salida
 
-GeoTIFF de una banda (uint8) con tabla de colores, en la proyección geoestacionaria del satélite (o EPSG:4326 si se reproyecta). Valores:
+GeoTIFF de una banda (uint8) con tabla de colores, en la proyección geoestacionaria del satélite (o EPSG:4326 si se reproyecta), y junto a él un estilo de QGIS con el mismo nombre (`ceniza_X.qml`). Valores:
 
 | valor | significado | color |
 |---|---|---|
+| 0 | sin ceniza | transparente (con el `.qml`) |
 | 1 | ceniza confirmada (CA) | rojo |
 | 2 | probabilidad alta (HAP) | naranja |
 | 3 | probabilidad baja (LAP) | amarillo |
-| 255 | sin ceniza o sin datos (NoData) | transparente |
+| 4, 5 | reservados (los usaban versiones anteriores; ver `ash.cpt`) | — |
+| 255 | sin datos (NoData) | transparente |
 
-Hoy "sin ceniza" (0) se guarda como 255 para que QGIS lo muestre transparente. El plan de octubre de 2026 (P7) separa los dos casos: 0 = sin ceniza, 255 = sin datos, 6 = nube, y deja reservados el 4 y el 5, que usaban versiones anteriores (`ash.cpt`).
+La paleta de un TIFF no guarda transparencia, así que sin el `.qml` QGIS dibuja el 0 en negro. QGIS carga el `.qml` solo si está junto al GeoTIFF con el mismo nombre; si no, se puede cargar a mano el `ceniza.qml` del repositorio (Propiedades → Simbología → Estilo → Cargar estilo). `--sin-qml` evita escribirlo. Entre mayo y octubre de 2026 el 0 se guardaba como 255.
 
 El archivo incluye georreferenciación completa y puede ser visualizado en cualquier software GIS (QGIS, ArcGIS, etc.).
 
@@ -233,6 +236,7 @@ LANOT_ceniza/
 ├── detect_ash.py       # Detección de ceniza (lanot-detect-ash)
 ├── compare_ash.py      # Comparación con resultados de referencia (lanot-compare-ash)
 ├── pyproject.toml      # Configuración del paquete instalable
+├── ceniza.qml          # Estilo de QGIS para los GeoTIFF (lo escribe también junto a cada salida)
 ├── ash.cpt             # Paleta de colores histórica (incluye las clases 4 y 5, ya no usadas)
 ├── tests/              # Pruebas (pytest) y recortes de datos reales para la regresión
 ├── herramientas/       # Comparación entre versiones y generación de datos de prueba

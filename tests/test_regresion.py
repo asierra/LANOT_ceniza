@@ -56,3 +56,30 @@ def test_los_casos_tienen_ceniza():
         with rasterio.open(DATOS / "esperado" / f"ceniza_{instante}.tif") as d:
             v = d.read(1)
         assert np.isin(v, [1, 2, 3]).sum() > 0, instante
+
+
+def test_estilo_qml(efemerides, tmp_path):
+    """El .qml se escribe junto al GeoTIFF, es XML válido y es igual al ceniza.qml del repo."""
+    import xml.etree.ElementTree as ET
+    eph, ts = efemerides
+    salida = tmp_path / "ceniza_20190601332.tif"
+    detect_ash.process_instant(DATOS / "l2", detect_ash.normalize_moment("20190601332"), salida, eph=eph, ts=ts)
+    qml = salida.with_suffix(".qml")
+    assert qml.exists()
+    entradas = {int(e.get("value")): int(e.get("alpha")) for e in ET.parse(qml).iter("paletteEntry")}
+    assert entradas[0] == 0, "sin ceniza debe ser transparente"
+    assert all(a == 255 for v, a in entradas.items() if v != 0)
+    assert qml.read_text() == (Path(__file__).parents[1] / "ceniza.qml").read_text(), \
+        "ceniza.qml del repo desactualizado: regenerarlo con detect_ash.estilo_qml()"
+
+
+def test_sin_ceniza_es_0_y_sin_datos_255(efemerides, tmp_path):
+    eph, ts = efemerides
+    salida = tmp_path / "ceniza_20240580406.tif"
+    detect_ash.process_instant(DATOS / "l2", detect_ash.normalize_moment("20240580406"), salida, eph=eph, ts=ts,
+                               escribe_qml=False)
+    assert not salida.with_suffix(".qml").exists()
+    with rasterio.open(salida) as d:
+        v = d.read(1)
+        assert d.nodata == 255
+    assert (v == 0).sum() > 0.9 * v.size  # casi todo es "sin ceniza", no "sin datos"
