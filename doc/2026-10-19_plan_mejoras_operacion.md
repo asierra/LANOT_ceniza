@@ -246,3 +246,20 @@ El prototipo de referencia usaba las clases 4 y 5 para HAP y LAP con agua líqui
 | P8 | `fd20e2e` | 63 escenas: 0 píxeles distintos (el SZA exacto en 70 u 85 casi no ocurre) |
 | P9 | `25861d7` | 63 escenas: 0 píxeles distintos |
 | `vigila_ceniza.sh` | `b43e6a8` | escaneos perdidos según el CSV y no la carpeta de salida (falsa alarma al cambiar RECORTE) |
+
+## Comparación con la versión del artículo (2026-10-20)
+
+Versión de diciembre de 2025 (`90ad79f`, con la que se hicieron los resultados del artículo) contra la final de la fase 2 (`25861d7`), en las mismas 63 escenas CONUS completas (2024-02-27 y 2019-03-01), solo clases de ceniza (`compara_salidas.py --solo-ceniza`):
+
+| diciembre \ final | sin ceniza | CA | HAP | LAP |
+|---|---|---|---|---|
+| sin ceniza | 236 103 535 | 0 | 289 | 2 |
+| CA | 3 | 31 734 | 0 | 0 |
+| HAP | 35 450 | 0 | 50 484 | 0 |
+| LAP | 25 464 | 0 | 0 | 3 039 |
+
+- **Ceniza confirmada: igual** (3 de 31 737 píxeles; la CA diurna exige R1.37 > 0.002 desde mayo).
+- **HAP −41 % y LAP −89 %, por un solo cambio de mayo** (`9dd4752`): el HAP con ΔT2 < −1.5 pasa a 0, como dice el texto del artículo. En diciembre esos píxeles seguían como HAP, o bajaban a LAP si la fase era agua líquida, porque la regla de fase se aplicaba después. Verificado píxel por píxel en 2024-02-27 04:06: todo lo que desaparece tiene ΔT2 < −1.5.
+- P6, P8 y P9 suman +291 píxeles (ver arriba).
+
+Para el artículo: los números se calcularon con un algoritmo que conserva el HAP con ΔT2 < −1.5 (y lo convierte en LAP sobre agua líquida), mientras que el texto describe que se elimina. La ceniza confirmada, que domina la detección de eventos, no cambia.
