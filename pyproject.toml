@@ -24,11 +24,12 @@ dependencies = [
   "netcdf4",
   "pyproj",
   "python-dateutil",
-  "matplotlib",
+  "rasterio",
 ]
 
 [project.optional-dependencies]
 pruebas = ["pytest"]
+comparacion = ["matplotlib"]  # solo lanot-compare-ash
 
 [project.urls]
 Repository = "https://github.com/asierra/LANOT_ceniza"

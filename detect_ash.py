@@ -4,12 +4,17 @@
 import argparse
 import datetime
 import logging
-import xarray as xr
-import numpy as np
-from scipy import ndimage
 from pathlib import Path
-from skyfield.api import utc
-from skyfield.api import Loader
+
+import numpy as np
+import rasterio
+import xarray as xr
+from affine import Affine
+from dateutil.parser import parse as parse_fecha
+from pyproj import CRS, Transformer
+from rasterio.warp import Resampling
+from scipy import ndimage
+from skyfield.api import Loader, utc
 import os
 import re
 import sys
@@ -77,49 +82,17 @@ for region_name, bbox in CLIP_REGIONS.items():
  
 def get_moment(is_conus=True):
     """
-    Calcula la fecha y hora más reciente según el dominio:
-    - Si conus: minutos terminados en 1 o 6 (01, 06, 11, 16, 21, 26, 31, 36, 41, 46, 51, 56)
-    - Si full disk: minutos múltiplos de 10 (00, 10, 20, 30, 40, 50)
+    Instante (YYYYjjjHHMM) del escaneo más reciente que ya empezó:
+    - CONUS: minutos terminados en 1 o 6;
+    - disco completo: minutos múltiplos de 10.
     """
-    ahora_utc = datetime.datetime.now(datetime.timezone.utc)
-
+    t = datetime.datetime.now(datetime.timezone.utc).replace(second=0, microsecond=0)
     if is_conus:
-        minuto_actual = ahora_utc.minute
-        
-        # Encontrar el minuto más reciente terminado en 1 o 6
-        # Primero calculamos el minuto base (múltiplo de 5 más cercano hacia abajo)
-        base = (minuto_actual // 5) * 5
-        
-        # Determinamos cuál es el minuto válido más reciente
-        if base % 10 == 0:  # base termina en 0 (ej: 0, 10, 20, 30, 40, 50)
-            # El más reciente terminado en 1 o 6 sería base + 1 si no hemos pasado,
-            # o base - 4 (el terminado en 6 anterior)
-            if minuto_actual >= base + 1:
-                minuto_redondeado = base + 1
-            else:
-                minuto_redondeado = base - 4 if base >= 4 else 56
-                if minuto_redondeado == 56 and base < 4:
-                    # Retroceder una hora
-                    ahora_utc = ahora_utc.replace(hour=ahora_utc.hour - 1 if ahora_utc.hour > 0 else 23)
-                    if ahora_utc.hour == 23:
-                        ahora_utc = ahora_utc - datetime.timedelta(days=1)
-        else:  # base termina en 5 (ej: 5, 15, 25, 35, 45, 55)
-            # El más reciente terminado en 1 o 6 sería base + 1 (terminado en 6) si no hemos pasado,
-            # o base - 4 (el terminado en 1)
-            if minuto_actual >= base + 1:
-                minuto_redondeado = base + 1
-            else:
-                minuto_redondeado = base - 4
+        t -= datetime.timedelta(minutes=1)
+        t = t.replace(minute=t.minute // 5 * 5) + datetime.timedelta(minutes=1)
     else:
-        # Para Full Disk: múltiplos de 10
-        minuto_redondeado = (ahora_utc.minute // 10) * 10
-
-    # Crear el nuevo objeto datetime con los minutos ajustados
-    dt_ajustado = ahora_utc.replace(minute=minuto_redondeado, second=0, microsecond=0)  
-
-    # Formatear la fecha al formato "YYYYjjjhhmm"
-    moment = dt_ajustado.strftime("%Y%j%H%M")
-    return moment
+        t = t.replace(minute=t.minute // 10 * 10)
+    return t.strftime("%Y%j%H%M")
 
 
 def normalize_moment(moment):
@@ -138,8 +111,6 @@ def normalize_moment(moment):
             - moment_julian es el instante en formato YYYYjjjHHMM
             - year, month, day son strings para construir rutas YYYY/MM/DD
     """
-    from datetime import datetime
-    
     if len(moment) == 12:
         # Formato gregoriano: YYYYMMDDhhmm
         year = moment[:4]
@@ -148,7 +119,7 @@ def normalize_moment(moment):
         hhmm = moment[8:12]
         
         # Convertir a día juliano
-        date_obj = datetime.strptime(f"{year}{month}{day}", "%Y%m%d")
+        date_obj = datetime.datetime.strptime(f"{year}{month}{day}", "%Y%m%d")
         julian_day = f"{date_obj.timetuple().tm_yday:03d}"
         
         # Construir instante en formato juliano
@@ -163,7 +134,7 @@ def normalize_moment(moment):
         julian_day = moment[4:7]
         
         # Convertir día juliano a mes/día
-        date_obj = datetime.strptime(f"{year}{julian_day}", "%Y%j")
+        date_obj = datetime.datetime.strptime(f"{year}{julian_day}", "%Y%j")
         month = f"{date_obj.month:02d}"
         day = f"{date_obj.day:02d}"
         
@@ -254,8 +225,7 @@ def group_and_report_failures(failed_info, interval_minutes=5, verbose=False):
     if not failed_info:
         return
 
-    print("\n--- Resumen de Fallas ---")
-    print(f"Advertencia: No se encontraron datos completos para {len(failed_info)} instantes.")
+    logger.warning(f"\n--- Resumen de fallas ---\nNo se encontraron datos completos para {len(failed_info)} instantes.")
 
     # Extraer solo los instantes para el agrupamiento, manteniendo la referencia de las rutas
     failed_moments = sorted([info[0] for info in failed_info])
@@ -278,13 +248,13 @@ def group_and_report_failures(failed_info, interval_minutes=5, verbose=False):
 
     for start, end in groups:
         if start != end:
-            print(f"  - Intervalo fallido: {start} a {end}")
+            logger.warning(f"  - Intervalo fallido: {start} a {end}")
         else:
-            print(f"  - Instante fallido: {start}")
+            logger.warning(f"  - Instante fallido: {start}")
             
         if verbose:
             path_searched = moment_to_path[start]
-            print(f"    Ruta buscada: {path_searched}")
+            logger.warning(f"    Ruta buscada: {path_searched}")
 
 
 def detect_goes_minute_offset(data_path, first_moment_info, use_date_tree=False, window_minutes=4):
@@ -331,7 +301,7 @@ def detect_goes_minute_offset(data_path, first_moment_info, use_date_tree=False,
                     f"Ajustando todos los instantes del rango."
                 )
             else:
-                logger.debug(f"Sin desfase: archivos coinciden con el instante nominal.")
+                logger.debug("Sin desfase: archivos coinciden con el instante nominal.")
             return offset
 
     logger.debug(
@@ -650,8 +620,6 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     goes_proj = ds_c07['goes_imager_projection']
     
     # Construir el CRS usando el string Proj4 de GOES-16
-    from pyproj import CRS, Transformer
-    from affine import Affine
     proj_string = (f"+proj=geos +h={goes_proj.perspective_point_height} "
                    f"+lon_0={goes_proj.longitude_of_projection_origin} "
                    f"+sweep={goes_proj.sweep_angle_axis} "
@@ -731,9 +699,6 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
    # Configurar geo_template con la información espacial
     geo_template = ds_c07['CMI']
     
-    # Aseguramos que la altura sea float nativo
-    goes_height = float(goes_proj.perspective_point_height)
-
     # --- Construir la geotransformación manualmente (CORREGIDO) ---
     try:
         # CASO A: Metadatos presentes (vienen en Radianes -> Convertimos a Metros)
@@ -745,13 +710,13 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
             y_res_meters = float(ds_c07['y'].encoding['scale_factor']) * goes_height
         else:
             # CASO B: Sin metadatos, calculamos desde los datos
-            # IMPORTANTE: x_coords_full YA ESTÁN EN METROS (ver línea 538)
+            # x_coords_full ya está en metros (se multiplicó por la altura del satélite).
             # Por lo tanto, NO multiplicamos por goes_height aquí.
             x_res_meters = (x_coords_full[-1] - x_coords_full[0]) / (len(x_coords_full) - 1)
             y_res_meters = (y_coords_full[-1] - y_coords_full[0]) / (len(y_coords_full) - 1)
             
     except Exception as e:
-        print(f"Advertencia: Usando resolución fallback para banda IR: {e}")
+        logger.warning(f"Usando resolución fallback para banda IR: {e}")
         # Fallback (Radianes -> Metros)
         x_res_meters = 0.000056 * goes_height
         y_res_meters = -0.000056 * goes_height
@@ -815,7 +780,7 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     # Actualizar máscara: también marcar como inválidos los píxeles fuera del disco visible
     valid_data_mask = valid_data_mask & np.isfinite(lon) & np.isfinite(lat)
     
-    logger.debug(f"\n--- Coordenadas calculadas ---")
+    logger.debug("\n--- Coordenadas calculadas ---")
     logger.debug(f"Forma de lat/lon: {lat.shape}")
     logger.debug(f"Rango de latitud: [{np.nanmin(lat):.2f}, {np.nanmax(lat):.2f}]")
     logger.debug(f"Rango de longitud: [{np.nanmin(lon):.2f}, {np.nanmax(lon):.2f}]")
@@ -828,8 +793,7 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     ds_c07.close()
     
     # Parsear el string ISO 8601 a datetime
-    from dateutil.parser import parse
-    image_time_dt = parse(time_coverage_start).replace(tzinfo=utc)
+    image_time_dt = parse_fecha(time_coverage_start).replace(tzinfo=utc)
 
     logger.debug(f"Fecha y hora {image_time_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     sza = get_sun_zenith_angle(lat, lon, image_time_dt, eph, ts)
@@ -837,7 +801,7 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     # --- Clasificación de ceniza ---
     ceniza = classify_ash(c04, c07, c11, c13, c15, phase, sza, valid_data_mask)
 
-    print("\n--- Clasificación Final de Ceniza ---")
+    logger.debug("\n--- Clasificación final de ceniza ---")
     logger.debug(f"Forma del array final: {ceniza.shape}")
     logger.debug(f"Valores únicos en la clasificación: {np.unique(ceniza)}")
     logger.debug(f"Píxeles sin datos (nodata=255): {np.sum(~valid_data_mask)} de {ceniza.size} ({100*np.sum(~valid_data_mask)/ceniza.size:.2f}%)")
@@ -870,8 +834,6 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
         logger.debug(f"Límites geográficos objetivo: lon[{lon_min}, {lon_max}], lat[{lat_min}, {lat_max}]")
         
         # Calcular resolución y dimensiones objetivo
-        from rasterio.warp import Resampling
-        from affine import Affine
         
         # Definir una resolución objetivo razonable (~0.02° ≈ 2km)
         # Esto es aproximadamente equivalente a la resolución GOES en esta latitud
@@ -908,7 +870,7 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
         
         logger.debug(f"Forma después de reproyección: {output_da.shape}")
         logger.debug(f"Límites después de reproyección: {output_da.rio.bounds()}")
-        logger.debug(f"CRS final: EPSG:4326 (lat/lon)")
+        logger.debug("CRS final: EPSG:4326 (lat/lon)")
 
     logger.debug(f"\nGuardando resultado en: {output_path}")
     
@@ -924,7 +886,6 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     height, width = data_to_save.shape
     
     # Guardar como GeoTIFF de 1 banda con colormap incrustado
-    import rasterio
     
     # Obtener transform y CRS del DataArray original
     transform = output_da.rio.transform()
@@ -946,8 +907,7 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
         dst.write_colormap(1, color_table)
         dst.write(data_to_save, 1)
     
-    print(f"¡Archivo GeoTIFF guardado con éxito (formato 1 banda con colormap)!")
-    print(f"Ruta: {Path(output_path).resolve()}")
+    logger.info(f"GeoTIFF guardado: {Path(output_path).resolve()}")
 
 def main():
     parser = argparse.ArgumentParser(description="Detecta ceniza volcánica a partir de datos GOES L2.")
@@ -983,7 +943,7 @@ def main():
         try:
             instant_list = parse_moment_string(args.instant)
         except ValueError as e:
-            print(f"Error: {e}")
+            logger.error(f"Error: {e}")
             sys.exit(SALIDA_USO)
     else:
         instant_list = [normalize_moment(get_moment())]
@@ -1003,7 +963,7 @@ def main():
             instant_list = adjusted
 
     # --- 2. Verificación de archivos (Pre-flight check) ---
-    print("\n--- Verificando disponibilidad de archivos ---")
+    logger.debug("\n--- Verificando disponibilidad de archivos ---")
     instantes_validos = []
     instantes_fallidos = []
 
@@ -1012,7 +972,7 @@ def main():
         try:
             _, faltan = busca_archivos(carpeta, instant_info[0])
         except ValueError as e:
-            print(f"Error: {e}")
+            logger.error(f"Error: {e}")
             faltan = ["(ambiguo)"]
         if faltan:
             logger.debug(f"{instant_info[0]}: faltan {', '.join(faltan)}")
@@ -1065,7 +1025,7 @@ def main():
                 try:
                     output_dir.mkdir(parents=True, exist_ok=True)
                 except Exception as e:
-                    print(f"Error creando el directorio de salida '{output_dir}': {e}")
+                    logger.error(f"No se pudo crear el directorio de salida '{output_dir}': {e}")
                     raise
                 if args.clip and args.clip.endswith('geo'):
                     filename = f"ceniza_{instant_str}_geo.tif"
@@ -1074,7 +1034,7 @@ def main():
                 output_file = output_dir / filename
             else:
                 if i > 0:
-                    print("Advertencia: Se especificó un único archivo de salida para un rango. Solo se procesará el primer instante válido.")
+                    logger.warning("Se especificó un único archivo de salida para un rango. Solo se procesa el primer instante válido.")
                     break
                 output_file = output_path
         else:
@@ -1094,7 +1054,7 @@ def main():
                 ts=ts_global
             )
             instantes_exitosos += 1
-        except Exception as e:
+        except Exception:
             instantes_con_error += 1
             logger.exception(f"\n*** Error crítico procesando instante {instant_str}:")
             logger.debug("Continuando con el siguiente instante...")

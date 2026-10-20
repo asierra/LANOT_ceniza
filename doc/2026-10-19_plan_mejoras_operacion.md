@@ -1,7 +1,7 @@
 # Plan de mejoras para la operación de `detect_ash.py`
 
 - **Fecha:** 2026-10-19
-- **Estado:** propuesta, pendiente de revisión. Nada implementado.
+- **Estado:** aprobado el 2026-10-19. Fases 0 y 1 implementadas el mismo día (ver "Seguimiento" al final); fases 2 y 3 pendientes.
 - **Rama:** `operacion-tahan`
 
 ## Contexto
@@ -150,7 +150,24 @@ Quedan **reservadas**: el código no las produce, pero conservan su entrada en l
 | 6 | nube: ceniza no detectable (fase mixta o hielo) | decidido; se implementa después del cambio 0/255 |
 | 255 | sin datos | en uso |
 
-**Antes de cambiar:** el 255 se introdujo en mayo "para mejorar la compatibilidad con QGIS" (`785d9d5`): así QGIS deja transparente lo que no es ceniza sin configurar nada. Hay que comprobar que QGIS respete el alfa de la tabla de colores para el 0 (y para el 6); si no, documentar cómo configurarlo. También hay que revisar quién consume los GeoTIFF (vistas de LANOT_tools, kawak, dataservice) y si alguno depende del 255. Hoy la operación es nueva y solo guarda en tahan, así que es buen momento.
+**Antes de cambiar:** el 255 se introdujo en mayo "para mejorar la compatibilidad con QGIS" (`785d9d5`): así QGIS deja transparente lo que no es ceniza sin configurar nada.
+
+**Prueba en QGIS 3.44 LTR (2026-10-19)**, con GeoTIFF sintéticos de valores 0, 1, 2, 3, 6 y 255, cargados con PyQGIS como al abrir el archivo:
+
+| formato | 0 sin ceniza | 6 nube | 255 sin datos | leyenda |
+|---|---|---|---|---|
+| actual (0 guardado como 255) | transparente | (no existe) | transparente | 256 clases |
+| 0 con alfa 0 en la tabla de colores | **negro opaco** | gris | transparente | 256 clases |
+| 0 fuera de una máscara interna (`GDAL_TIFF_INTERNAL_MASK`) | transparente | gris | transparente | 256 clases |
+| tabla de colores + estilo `.qml` con el mismo nombre | transparente | gris | transparente | **5 clases con nombre** |
+
+- La paleta de un TIFF solo admite RGB: GDAL descarta el alfa al escribir (se lee de vuelta como 255). El 255 sale transparente solo por ser NoData. Por eso el alfa en la tabla no basta.
+- La máscara interna funciona en QGIS, pero los programas que respetan máscaras (por ejemplo, `rasterio.read(masked=True)`) tratarían el 0 como dato faltante, que es justo la confusión que se quiere quitar.
+- El estilo `.qml` junto al archivo (`ceniza_X.tif` + `ceniza_X.qml`) lo carga QGIS solo al abrirlo, deja el 0 transparente y además arregla la leyenda: hoy QGIS muestra 256 clases porque la paleta de un TIFF siempre tiene 256 entradas.
+
+**Propuesta:** datos limpios (0, 1–3, 6, 255; NoData = 255; sin máscara), un `ceniza.qml` en el repo y la opción de escribir el `.qml` junto a cada GeoTIFF (en operación, siempre; es ~1 KB). Las vistas web (LANOT_tools) colorean por su cuenta y no dependen de esto.
+
+Además hay que revisar quién consume los GeoTIFF (vistas de LANOT_tools, kawak, dataservice) y si alguno depende del 255. Hoy la operación es nueva y solo guarda en tahan, así que es buen momento.
 
 ### P8. Límites del crepúsculo
 
@@ -212,3 +229,14 @@ El prototipo de referencia usaba las clases 4 y 5 para HAP y LAP con agua líqui
 2. ~~P7: 0 = sin ceniza, 255 = sin datos~~: confirmado (2026-10-19), con 4 y 5 reservados y 6 = nube (fases mixta y hielo).
 3. Con el autor principal (~2026-10-21): P10, P11 y si la fase superenfriada cuenta como nube (6).
 4. ~~P1: `--jobs`~~: se elimina junto con el kernel vectorizado (2026-10-19).
+
+## Seguimiento
+
+| punto | commit | nota |
+|---|---|---|
+| P0 | `6a366a5` | 3 casos reales (noche, crepúsculo, día) + pruebas por regla |
+| P1 | `6e3629d` | casos de regresión idénticos |
+| P2 | `aa57f3c` | mismos 63/63 instantes completos en la muestra de 2019 y 2024 |
+| P3 | `8ee5257` | |
+| P4 | `3073b65` | códigos de salida: 0 bien, 1 error, 2 uso, 3 faltan datos |
+| P5 | (commit de limpieza) | README, `compare_ash.py`, sin `requirements.txt`; matplotlib opcional; este documento y `2026-10-18_operacion_tahan.md` |

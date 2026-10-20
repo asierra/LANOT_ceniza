@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import matplotlib
-matplotlib.use('Agg') # Modo sin ventana (servidores)
-
 import argparse
-import xarray as xr
-import rioxarray
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
-import matplotlib.patches as mpatches
-from pathlib import Path
-import sys
 import re
+import sys
+from pathlib import Path
+
+import numpy as np
+import rioxarray
+
+try:
+    import matplotlib
+    matplotlib.use('Agg')  # Modo sin ventana (servidores)
+    import matplotlib.patches as mpatches
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import ListedColormap
+except ImportError:
+    sys.exit("lanot-compare-ash necesita matplotlib: pip install 'lanot_ceniza[comparacion]'")
 
 def extract_timestamp(filename):
     """Intenta extraer YYYYjjjHHmm (11 dígitos) del nombre del archivo."""
@@ -29,9 +32,9 @@ def analizar_y_visualizar(ref_path, test_path, output_png):
     ts_ref = extract_timestamp(ref_name)
     ts_test = extract_timestamp(test_name)
 
-    print(f"\n" + "="*60)
-    print(f"      COMPARACIÓN DE ALGORITMOS: TeraScan vs Python")
-    print(f"="*60)
+    print("\n" + "="*60)
+    print("      COMPARACIÓN DE ALGORITMOS: TeraScan vs Python")
+    print("="*60)
     print(f"TeraScan (Ref): {ref_name} | TS: {ts_ref}")
     print(f"Python (Test):  {test_name}            | TS: {ts_test}")
     
@@ -121,7 +124,6 @@ def analizar_y_visualizar(ref_path, test_path, output_png):
 
 
     # 5. Estadísticas
-    total_pixels = ref_data.size
     n_fp = np.sum(mask_fp)
     n_fn = np.sum(mask_fn)
     n_diff = np.sum(mask_diff_class)
@@ -183,7 +185,7 @@ def analizar_y_visualizar(ref_path, test_path, output_png):
 
     plt.figure(figsize=(12, 10))
     # Interpolación nearest para ver píxeles exactos
-    im = plt.imshow(diff_map, cmap=cmap, vmin=0, vmax=4, interpolation='nearest')
+    plt.imshow(diff_map, cmap=cmap, vmin=0, vmax=4, interpolation='nearest')
     
     plt.title(f"Comparación: TeraScan vs Python\nTimestamp Ref: {ts_ref}", fontsize=14)
     plt.axis('off')

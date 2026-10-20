@@ -1,10 +1,10 @@
 # LANOT_ceniza
 
-Sistema de detección de ceniza volcánica del Popocatépetl utilizando datos del satélite GOES-16 (ABI).
+Sistema de detección de ceniza volcánica del Popocatépetl utilizando datos del ABI de los satélites GOES-East (GOES-16 hasta abril de 2025, GOES-19 desde entonces).
 
 ## Descripción
 
-Este proyecto procesa datos de nivel 2 (L2) del instrumento ABI (Advanced Baseline Imager) del satélite GOES-16 para detectar y analizar ceniza volcánica emitida por el volcán Popocatépetl. 
+Este proyecto procesa datos de nivel 2 (L2) del instrumento ABI (Advanced Baseline Imager) de GOES-East para detectar y analizar ceniza volcánica emitida por el volcán Popocatépetl. 
 
 El sistema utiliza múltiples canales infrarrojos y productos derivados para:
 - Calcular diferencias de temperatura de brillo (BTD - Brightness Temperature Difference)
@@ -77,9 +77,12 @@ El sistema utiliza múltiples canales infrarrojos y productos derivados para:
 - **pyproj**: Transformaciones de sistemas de coordenadas y proyecciones (GOES ↔ lat/lon)
 - **affine**: Geotransformaciones afines para georreferenciación
 - **python-dateutil**: Parsing de fechas en formato ISO 8601
-- **Pillow (PIL)**: Generación de imágenes PNG a color
-- **aggdraw**: Dibujo de vectores de alta calidad sobre imágenes PNG
-- **pyshp**: Lectura de archivos shapefile para mapas base
+- **rasterio**: Escritura del GeoTIFF con tabla de colores
+- **matplotlib** (opcional): solo para `lanot-compare-ash`; se instala con `pip install '.[comparacion]'`
+
+Las imágenes PNG con mapa base ya no las genera este paquete: se hacen con [LANOT_tools](https://github.com/asierra/LANOT_tools) a partir del GeoTIFF (ver [la refactorización de mayo de 2026](doc/2026-05-01_refactorizacion.md)).
+
+Para correr las pruebas: `pip install -e '.[pruebas]'` y `pytest`.
 
 ## Uso
 
@@ -96,7 +99,7 @@ lanot-detect-ash
 Procesar un instante específico:
 
 ```bash
-lanot-detect-ash --path /data/ceniza/2019/spring --instant 20191001731
+lanot-detect-ash --path /data/ceniza/l2 --date-tree --instant 20191001731
 ```
 
 Especificar archivo o directorio de salida:
@@ -115,8 +118,9 @@ lanot-detect-ash --instant 20191001731 --clip popocatepetlgeo --output /data/res
 
 ### Parámetros de línea de comandos
 
-- `--path`: Ruta al directorio que contiene los archivos NetCDF L2 (por defecto: `/data/ceniza/2019/spring`)
-- `--instant`: Instante a procesar en formato `YYYYjjjHHMM` (año, día juliano, hora y minuto). Si no se especifica, se calcula automáticamente el más reciente
+- `--path` / `-p`: Ruta al directorio que contiene los archivos NetCDF L2 (por defecto: `/data/ceniza/l2`)
+- `--date-tree`: Busca los archivos en `--path/AAAA/MM/DD` según el instante
+- `--instant` / `-m`: Instante a procesar: `YYYYjjjHHMM` (día juliano) o `YYYYMMDDHHMM`; también un rango del mismo día, `YYYYjjjHHMM-HHMM` o `YYYYMMDDHHMM-HHMM`. Si no se especifica, se calcula el más reciente
 - `--output`: Ruta de salida para el GeoTIFF. Puede ser:
   - **Un archivo**: `resultado.tif` - Guarda con ese nombre
   - **Un directorio**: `/data/salida/` - Genera automáticamente `ceniza_[instante].tif` (o con sufijo `_geo` si se reproyecta)
@@ -126,7 +130,9 @@ lanot-detect-ash --instant 20191001731 --clip popocatepetlgeo --output /data/res
   - `centromexgeo`: Centro de México (reproyectado a lat/lon EPSG:4326)
   - `popocatepetl`: Región del Popocatépetl (proyección GOES nativa)
   - `popocatepetlgeo`: Región del Popocatépetl (reproyectado a lat/lon EPSG:4326)
-- `--png`: Genera también una imagen PNG a color con mapa base, fecha/hora y logo LANOT
+  - `ashpaper`, `ashpapergeo`: Región del artículo (la que usa la operación en tahan)
+- `--dry-run`: Solo revisa qué instantes tienen todos los archivos
+- `--verbose` / `-v`: Mensajes detallados
 
 ### Ejemplos de uso
 
@@ -135,35 +141,29 @@ lanot-detect-ash --instant 20191001731 --clip popocatepetlgeo --output /data/res
 lanot-detect-ash --path /data/ceniza/2019/spring --instant 20190871402
 ```
 
-**Generar también imagen PNG a color:**
-```bash
-lanot-detect-ash --instant 20190871402 --png
-```
-
 **Recorte a región específica (proyección GOES):**
 ```bash
 lanot-detect-ash --instant 20190871402 --clip centromex
-lanot-detect-ash --instant 20190871402 --clip popocatepetl --png
+lanot-detect-ash --instant 20190871402 --clip popocatepetl
 ```
 
 **Recorte con reproyección a coordenadas geográficas:**
 ```bash
-lanot-detect-ash --instant 20190871402 --clip centromexgeo --png
-lanot-detect-ash --instant 20190871402 --clip popocatepetlgeo --output /data/salida/ --png
+lanot-detect-ash --instant 20190871402 --clip centromexgeo
+lanot-detect-ash --instant 20190871402 --clip popocatepetlgeo --output /data/salida/
 ```
 
-**Guardar múltiples archivos en un directorio:**
+**Un rango de instantes en un directorio:**
 ```bash
-# El directorio puede especificarse solo una vez
-lanot-detect-ash --instant 20190871402 --output /data/procesados/ --png
-lanot-detect-ash --instant 20190871506 --output /data/procesados/ --png
-# Genera: ceniza_20190871402.tif, ceniza_20190871402.png, ceniza_20190871506.tif, etc.
+lanot-detect-ash --instant 201903010800-1430 --path /data/ceniza/l2 --date-tree --output /data/procesados/
+# Genera: ceniza_20190600802.tif, ceniza_20190600807.tif, ...
 ```
 
 ### Regiones de recorte predefinidas
 
 - **centromex**: [-107.23, 22.72, -93.84, 14.94] (lon_min, lat_max, lon_max, lat_min)
 - **popocatepetl**: [-100.26, 20.58, -96.85, 18.29]
+- **ashpaper**: [-102.418, 22.474, -96.294, 17.547]
 
 El recorte se realiza **antes** de procesar los datos, mejorando significativamente el rendimiento y reduciendo el uso de memoria.
 
@@ -176,40 +176,18 @@ El cálculo más costoso, la desviación estándar local del kernel 5×5, usa fi
 
 ### Salida
 
-El script genera un archivo GeoTIFF con la clasificación de ceniza volcánica en proyección geoestacionaria GOES-16 (o EPSG:4326 si se reproyecta). Los valores en el raster representan:
+GeoTIFF de una banda (uint8) con tabla de colores, en la proyección geoestacionaria del satélite (o EPSG:4326 si se reproyecta). Valores:
 
-- **0**: Sin detección (negro en PNG)
-- **1**: Ceniza volcánica - alta confianza (rojo en PNG)
-- **2**: Ceniza volcánica - media confianza (naranja en PNG)
-- **3**: Ceniza volcánica refinada - umbral delta2 (amarillo en PNG)
-- **4**: Nube de agua reclasificada (verde en PNG)
-- **5**: Ceniza sobre superficie fría (azul en PNG)
+| valor | significado | color |
+|---|---|---|
+| 1 | ceniza confirmada (CA) | rojo |
+| 2 | probabilidad alta (HAP) | naranja |
+| 3 | probabilidad baja (LAP) | amarillo |
+| 255 | sin ceniza o sin datos (NoData) | transparente |
+
+Hoy "sin ceniza" (0) se guarda como 255 para que QGIS lo muestre transparente. El plan de octubre de 2026 (P7) separa los dos casos: 0 = sin ceniza, 255 = sin datos, 6 = nube, y deja reservados el 4 y el 5, que usaban versiones anteriores (`ash.cpt`).
 
 El archivo incluye georreferenciación completa y puede ser visualizado en cualquier software GIS (QGIS, ArcGIS, etc.).
-
-**Salida PNG (opcional con `--png`):**
-
-Cuando se usa el parámetro `--png`, se genera también una imagen PNG a color con las mismas dimensiones que el GeoTIFF. La imagen incluye:
-
-- **Clasificación de ceniza** con colores definidos en `ash.cpt`:
-  - Rojo: Ceniza volcánica de alta confianza
-  - Naranja: Ceniza probable
-  - Amarillo: Ceniza menos probable
-  - Verde: Nubes de agua
-  - Azul: Ruido/superficie fría
-  - Negro: Sin detección
-
-- **Mapa base** dibujado con MapDrawer (si está disponible `/usr/local/share/lanot`):
-  - Líneas costeras (blanco)
-  - Fronteras nacionales (blanco)
-  - Estados de México (blanco)
-  - **Logo LANOT** en esquina superior derecha
-  - **Fecha/hora** en esquina inferior izquierda (formato: "2019/10/10 17:31Z")
-    - Usa fuente monoespaciada DejaVuSansMono para mantener posición fija en animaciones
-
-La imagen PNG calcula automáticamente los límites geográficos del raster (ya sea en proyección GOES o reproyectado a lat/lon) y dibuja el mapa base en las coordenadas correctas.
-
-> **Nota**: Para que MapDrawer funcione correctamente, se requieren los archivos shapefile en `/usr/local/share/lanot/shapefiles/` y el logo en `/usr/local/share/lanot/logos/`. Si estos recursos no están disponibles, el PNG se generará solo con la clasificación de ceniza.
 
 **Nombres de archivo con sufijo `_geo`:**
 
@@ -223,15 +201,11 @@ lanot-detect-ash --instant 20191001731
 # Con reproyección
 lanot-detect-ash --instant 20191001731 --clip popocatepetlgeo
 # Genera: ceniza_20191001731_geo.tif
-
-# Con PNG
-lanot-detect-ash --instant 20191001731 --clip popocatepetlgeo --png
-# Genera: ceniza_20191001731_geo.tif y ceniza_20191001731_geo.png
 ```
 
 ### Comparación de resultados (`lanot-compare-ash`)
 
-Permite comparar visualmente dos archivos GeoTIFF de clasificación (p. ej., resultado de TeraScan vs. el de este paquete) y genera una imagen PNG con matrices de confusión y estadísticas.
+Requiere matplotlib (`pip install '.[comparacion]'`). Permite comparar visualmente dos archivos GeoTIFF de clasificación (p. ej., resultado de TeraScan vs. el de este paquete) y genera una imagen PNG con matrices de confusión y estadísticas.
 
 #### Ejecución básica
 
@@ -256,33 +230,16 @@ lanot-compare-ash ceniza_20190871402_terascan.tif ceniza_20190871402.tif \
 
 ```
 LANOT_ceniza/
-├── detect_ash.py       # Script principal de detección
-├── compare_ash.py      # Script de comparación con resultados de referencia
+├── detect_ash.py       # Detección de ceniza (lanot-detect-ash)
+├── compare_ash.py      # Comparación con resultados de referencia (lanot-compare-ash)
 ├── pyproject.toml      # Configuración del paquete instalable
-├── requirements.txt    # Dependencias del proyecto
-├── ash.cpt             # Paleta de colores para clasificación
-├── README.md          # Este archivo
-└── LICENSE            # Licencia del proyecto
+├── ash.cpt             # Paleta de colores histórica (incluye las clases 4 y 5, ya no usadas)
+├── tests/              # Pruebas (pytest) y recortes de datos reales para la regresión
+├── herramientas/       # Comparación entre versiones y generación de datos de prueba
+├── operacion/          # Cadena de baja latencia en tahan (ver operacion/README.md)
+├── doc/                # Planes y decisiones del proyecto, con fecha
+└── LICENSE
 ```
-
-### Recursos adicionales para PNG con mapa base (opcional)
-
-Para generar imágenes PNG con mapa base (opción `--png`), se requiere la siguiente estructura en `/usr/local/share/lanot`:
-
-```
-/usr/local/share/lanot/
-├── shapefiles/
-│   ├── ne_10m_coastline.shp         # Líneas costeras
-│   ├── ne_10m_admin_0_countries.shp # Fronteras nacionales
-│   └── dest_2015gwLines.shp         # Estados de México
-└── logos/
-    └── lanot_negro_sn-128.png       # Logo LANOT
-```
-
-Los shapefiles pueden descargarse de:
-- [Natural Earth - 10m Coastline](https://www.naturalearthdata.com/downloads/10m-physical-vectors/)
-- [Natural Earth - 10m Admin 0 - Countries](https://www.naturalearthdata.com/downloads/10m-cultural-vectors/)
-- Estados de México: `dest_2015gwLines.shp` (shapefile de estados de México de INEGI)
 
 ## Metodología
 
@@ -329,23 +286,28 @@ El algoritmo aplica diferentes umbrales según el ángulo cenital solar:
 
 #### 5. Refinamiento por umbrales
 
-- Reclasificación basada en delta2 ≥ -1.5 para ceniza refinada
-- Eliminación de falsos positivos usando delta3 ≤ 0 o delta3 ≤ 1.5
+Solo afectan a la probabilidad alta (HAP) y a la baja (LAP), salvo donde se indica:
+- HAP con delta2 ≥ -1 se conserva; con -1.5 ≤ delta2 < -1 pasa a LAP; con delta2 < -1.5 se elimina.
+- Clases 1 y 2 con delta3 ≤ 0 se eliminan (incluye la ceniza confirmada por el kernel).
+- LAP con delta3 ≤ 1.5 se elimina.
 
 #### 6. Clasificación final por fase de nube
 
 Usando el producto ACTP (Cloud Top Phase):
-- Reclasifica ceniza media confianza detectada sobre nubes de agua (Phase=1) 
-- Elimina detecciones sobre polvo (Phase=4)
-- Refina ceniza sobre hielo (Phase≥2)
+(Phase: 0 despejado, 1 agua líquida, 2 superenfriada, 3 mixta, 4 hielo, 5 desconocida)
+- HAP sobre agua líquida pasa a LAP; HAP sobre hielo se elimina.
+- LAP sobre cualquier nube (fase 1 a 5) se elimina.
+- La ceniza confirmada no cambia.
+
+La tabla completa de reglas, y las que están en revisión, está en [el plan de octubre de 2026](doc/2026-10-19_plan_mejoras_operacion.md) (P10, P11) y en `tests/test_clasificacion.py`.
 
 ### Proyección y georreferenciación
 
-Los datos se procesan en la proyección geoestacionaria nativa GOES-16:
+Los datos se procesan en la proyección geoestacionaria nativa del satélite, leída de cada archivo (`goes_imager_projection`). Para GOES-East:
 
 - **Proyección**: Geoestacionaria (GEOS)
 - **Altura satelital**: 35,786,023 m sobre el elipsoide
-- **Longitud central**: -75.0° (GOES-16 East)
+- **Longitud central**: -75.0° (GOES-16 hasta 2025; GOES-19 desde abril de 2025)
 - **Elipsoide**: GRS 1980
 - **Sistema de barrido**: Eje X
 
@@ -367,14 +329,15 @@ Este enfoque minimiza el uso de memoria y acelera significativamente el procesam
 - El script determina automáticamente el instante más reciente según la cadencia del dominio:
   - **CONUS**: Minutos terminados en 1 o 6 (ej: 01, 06, 11, 16, 21, 26, 31, 36, 41, 46, 51, 56)
   - **Full Disk**: Múltiplos de 10 (ej: 00, 10, 20, 30, 40, 50)
-- Los archivos de efémerides (`de421.bsp`) se descargan automáticamente por Skyfield la primera vez y se almacenan en `/usr/local/share/lanot/skyfield/` (el directorio se crea automáticamente)
+- Las efemérides (`de421.bsp`) se buscan en `LANOT_SKYFIELD_DIR`; si no está definida, en `/usr/local/share/lanot/skyfield/` si ahí están, y si no, en `~/.cache/lanot_ceniza/`, donde Skyfield las descarga la primera vez
+- `LANOT_CENIZA_L2` cambia la carpeta de datos L2 por omisión
+- Códigos de salida: 0 bien, 1 error al procesar, 2 argumentos inválidos, 3 faltan datos
 - El formato de tiempo en nombres de archivo es `YYYYjjjHHMM` (año, día juliano, hora y minuto UTC)
 - El procesamiento usa `np.select()` para clasificaciones eficientes y vectorizadas
 - Los filtros espaciales manejan correctamente valores NaN usando métodos optimizados de scipy.ndimage
 - La salida GeoTIFF preserva la proyección nativa GOES usando cadenas Proj4 simplificadas
 - **Sufijo `_geo`** se agrega automáticamente a los nombres de archivo cuando se reproyecta a EPSG:4326
 - **Salida a directorios**: Si `--output` es un directorio, genera nombres automáticos en esa ubicación
-- **Fuente monoespaciada** en PNG (DejaVuSansMono) mantiene la fecha fija para animaciones suaves
 
 ### Optimización de rendimiento
 
