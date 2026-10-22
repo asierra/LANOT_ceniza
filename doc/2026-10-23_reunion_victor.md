@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-10-23, en lanot7
 - **Preparado por:** Alejandro Aguilar Sierra
-- **Detalle:** `doc/2026-10-19_plan_mejoras_operacion.md` (fase 3), `doc/2026-10-21_publicacion_joss.md` y `doc/2026-10-21_perfiles_umbrales.md`
+- **Detalle:** `doc/2026-10-19_plan_mejoras_operacion.md` (los puntos P0 a P11 están definidos ahí; la fase 3 es P10 y P11), `doc/2026-10-21_publicacion_joss.md` y `doc/2026-10-21_perfiles_umbrales.md`
 
 ## Resumen
 
@@ -17,7 +17,7 @@ Muestra usada en todos los conteos, salvo que se diga otra cosa: 63 escenas CONU
 
 ## 1. Decisiones sobre el algoritmo (código actual)
 
-### 1.1 Regla de fase de nube (P10)
+### 1.1 Regla de fase de nube (punto P10 del plan de mejoras)
 
 | caso | código | texto del artículo | píxeles en la región del artículo (63 escenas) |
 |---|---|---|---|
@@ -29,7 +29,7 @@ Muestra usada en todos los conteos, salvo que se diga otra cosa: 63 escenas CONU
 
 Para comparar: 836 píxeles de HAP en total. **La diferencia es de menos del 1 %.** Cualquiera de las dos reglas es defendible; la pregunta es cuál es la buena físicamente.
 
-### 1.2 Filtro de ΔT3 sobre la ceniza confirmada (P11)
+### 1.2 Filtro de ΔT3 sobre la ceniza confirmada (punto P11 del plan de mejoras)
 
 El código borra la ceniza confirmada **por el kernel** cuando ΔT3 ≤ 0. La confirmada por umbrales no se ve afectada, porque ya exige ΔT3 > 2. La versión revisada del artículo dice "the Confirmed Ash (CA) category remained unchanged"; **el manuscrito de abril decía lo contrario** ("pixels classified as CA or HAP were removed if … ΔT3 less than 0"), igual que el código.
 
@@ -71,7 +71,24 @@ Versiones: **diciembre de 2025** (`90ad79f`, la que se usó para los resultados)
 
 ### 2.2 Cuánto cambian los resultados con las reglas de mayo
 
-> **Pendiente:** corrida en tahan de diciembre contra mayo, recortadas a la región del artículo, en 26 días completos de los eventos del artículo (2019-03-28, 06-14 y 06-17; 13 días de 2023; 10 de 2024): unos 7 200 escaneos. Se llena al terminar.
+Diciembre (`90ad79f`) contra mayo (`9dd4752`), recortadas a la región del artículo, en **26 días de los eventos del artículo**: 2019-03-28, 06-14 y 06-17; 13 días de 2023 (enero, mayo, junio, julio y septiembre) y 10 de 2024 (febrero, marzo y octubre). En total, 7 189 escaneos por versión, con los mismos archivos L2 de tahan. Se cuenta en toda la región y a menos de 100 km del volcán.
+
+| a menos de 100 km del volcán | diciembre | mayo | cambio |
+|---|---|---|---|
+| píxeles de CA | 465 363 | 465 332 | 0 % |
+| píxeles de HAP | 109 372 | 72 519 | −34 % |
+| píxeles de LAP | 42 790 | 40 116 | −6 % |
+| escaneos con alguna ceniza | 5 666 | 5 348 | −5.6 % |
+| escaneos con CA | 4 518 | 4 518 | 0 |
+| escaneos dentro de una racha de ≥2 seguidos con ceniza | 5 559 | 5 236 | −5.8 % |
+
+En toda la región (incluye falsos positivos lejos del volcán), el HAP baja 61 % y el LAP 39 %.
+
+- **La ceniza confirmada no cambia** (31 píxeles en 7 189 escaneos), ni los escaneos donde aparece.
+- **Lo que cambia son los escaneos con HAP o LAP pero sin CA**: de 1 148 a 830 (−28 %). Los días más afectados son los de poca ceniza confirmada: 2023-06-29 (de 53 a 25 escaneos con ceniza), 2023-07-22 (de 211 a 119), 2023-05-19 (de 64 a 43) y 2019-06-14 (de 164 a 115). En los días con emisión fuerte (2023-05-21, 2024-02-26, 2024-10-25) no cambia nada.
+- **Para el artículo:** si los números no se recalcularon después de mayo, los porcentajes de detección de eventos pueden bajar un poco en los eventos que solo se detectaron con HAP. Los que tienen CA no cambian. Para saber cuánto habría que repetir el conteo de eventos con la lista de CENAPRED.
+
+Archivos de esta comparación: `tahan:/data/ceniza/tmp/cmp_mayo_20261021/` (salidas de las dos versiones, `analiza.py`).
 
 No se pueden repetir los 7 casos de validación con VIIRS (Tabla 4): sus L2 no están en tahan ni en cirrus. Habría que regenerarlas desde las L1b.
 
