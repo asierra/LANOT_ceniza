@@ -222,7 +222,11 @@ Aquí no se propone cambiar el código sin antes acordar la regla con el autor p
 | crepúsculo | 70° < SZA < 85° | 70° ≤ SZA ≤ 85° | igual que diciembre | 0 |
 | precisión del SZA | "sub-arcsecond" | error de 0.2° a 0.35° (marco J2000 con tiempo sidéreo de la fecha) | ~0.003° (P6) | 291 píxeles en 13 escenas |
 
-En las dos primeras filas el texto describe lo que hizo mayo ("igualar terascan"), no lo que se usó para los resultados. Si se corrige el artículo, el texto describe diciembre; la versión actual se documenta en el artículo de JOSS.
+Las dos primeras filas ya estaban en el texto antes de mayo: en la metodología de noviembre de 2025 (`fase1/Metodology and results 29_11_2025.docx`) y en el manuscrito del 13 de abril de 2026 (`fase2/JimenezetalAshdetection.docx`). El commit de mayo (`9dd4752`, "Correcciones para igualar terascan") ajustó el código al texto, así que esas dos reglas se quedan en el artículo. Queda por confirmar si los números del artículo se recalcularon después del 4 de mayo: las estadísticas de `fase2` son del 22 al 29 de abril.
+
+P11: el manuscrito de abril coincidía con el código ("pixels classified as CA or HAP were removed if … ΔT3 less than 0"). La versión revisada de octubre dice "applied exclusively to HAP … CA remained unchanged". Preguntar al autor principal por qué cambió.
+
+La versión actual (SZA, kernel, clase 6, 0/255) se documenta en el artículo de JOSS, no en este.
 
 ### P10. Regla de fase de nube
 
