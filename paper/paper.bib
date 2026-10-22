@@ -1,22 +1,108 @@
-% Las entradas con TODO se completan antes de enviar.
+% Datos tomados de las referencias del artículo
+% (~/Dropbox/cca/lanot/ceniza/fase2/Jimenez et al Ash detection REV.docx),
+% salvo Folkner2009 y Raspaud2018. Las entradas con TODO se completan antes de enviar.
 
 @article{JimenezEscudero_articulo,
-  author  = {Jim{\'e}nez Escudero, V{\'i}ctor Manuel and others},
-  title   = {TODO: título del artículo},
+  author  = {Jim{\'e}nez-Escudero, V{\'i}ctor Manuel and G{\'o}mez-Rodr{\'i}guez, Gabriela and Nieto-Torres, Amiel and Martin-Del-Pozzo, Ana Lillian and Aguilar-Sierra, Alejandro and Prado-Molina, Jorge},
+  title   = {Ash detection with {ABI/GOES-16} images at {Popocat{\'e}petl} volcano, {M{\'e}xico}},
   journal = {TODO: revista},
   year    = {2026},
   note    = {TODO: volumen, páginas y DOI}
 }
 
-@article{Schmit2017,
-  author  = {Schmit, Timothy J. and Griffith, Paul and Gunshor, Mathew M. and Daniels, Jaime M. and Goodman, Steven J. and Lebair, William J.},
-  title   = {A Closer Look at the {ABI} on the {GOES-R} Series},
-  journal = {Bulletin of the American Meteorological Society},
-  volume  = {98},
+@misc{CSPPGeo,
+  author       = {{CSPP Geo Development Team}},
+  title        = {Community Satellite Processing Package for Geostationary Satellites ({CSPP Geo})},
+  howpublished = {Space Science and Engineering Center, University of Wisconsin--Madison},
+  year         = {2025},
+  url          = {https://cimss.ssec.wisc.edu/csppgeo/},
+  note         = {TODO: versión de CSPP Geo AIT usada en operación}
+}
+
+@incollection{Pavolonis2020,
+  author    = {Pavolonis, M. J. and Sieglaff, J. M. and Cintineo, J. L.},
+  title     = {Remote sensing of volcanic ash with the {GOES-R} series},
+  booktitle = {The {GOES-R} Series},
+  editor    = {Goodman, Steven J. and Schmit, Timothy J. and Daniels, Jaime and Redmon, Robert J.},
+  publisher = {Elsevier},
+  pages     = {103--124},
+  year      = {2020},
+  doi       = {10.1016/B978-0-12-814327-8.00010-X}
+}
+
+@article{Pavolonis2013,
+  author  = {Pavolonis, M. J. and Heidinger, A. K. and Sieglaff, J.},
+  title   = {Automated retrievals of volcanic ash and dust cloud properties from upwelling infrared measurements},
+  journal = {Journal of Geophysical Research: Atmospheres},
+  volume  = {118},
+  number  = {3},
+  pages   = {1436--1458},
+  year    = {2013},
+  doi     = {10.1002/jgrd.50173}
+}
+
+@article{Pavolonis2018,
+  author  = {Pavolonis, M. J. and Sieglaff, J. and Cintineo, J.},
+  title   = {Automated detection of explosive volcanic eruptions using satellite-derived cloud vertical growth rates},
+  journal = {Earth and Space Science},
+  volume  = {5},
+  pages   = {903--928},
+  year    = {2018},
+  doi     = {10.1029/2018EA000410}
+}
+
+@article{Guehenneux2024,
+  author  = {Gu{\'e}henneux, Y. and Gouhier, M.},
+  title   = {{HOTVOLC}: the official {French} satellite-based service for operational monitoring and early warning of volcanic ash plumes},
+  journal = {Bulletin of Volcanology},
+  volume  = {86},
   number  = {4},
-  pages   = {681--698},
+  pages   = {29},
+  year    = {2024},
+  doi     = {10.1007/s00445-024-01716-w}
+}
+
+@article{Juarez2024,
+  author  = {Ju{\'a}rez, S. P. and Ram{\'i}rez-Serrato, N. L. and Valade, S.},
+  title   = {Detection of volcanic ash using {GOES-16} satellite imagery: case study of {Popocat{\'e}petl} volcano, {Mexico}},
+  journal = {Revista de Gest{\~a}o Social e Ambiental},
+  volume  = {18},
+  number  = {10},
+  year    = {2024},
+  doi     = {10.24857/rgsa.v18n10-140}
+}
+
+@article{Vasconez2024,
+  author  = {V{\'a}sconez M{\"u}ller, A. and Bernard, B. and Vasconez, F. J.},
+  title   = {Near-real-time ash cloud height estimation based on {GOES-16} satellite imagery: A case study of the 2022--2023 eruption of {Cotopaxi} volcano, {Ecuador}},
+  journal = {Volcanica},
+  volume  = {7},
+  number  = {1},
+  pages   = {405--419},
+  year    = {2024},
+  doi     = {10.30909/vol.07.01.405419}
+}
+
+@article{Harris2020,
+  author  = {Harris, Charles R. and Millman, K. Jarrod and van der Walt, St{\'e}fan J. and Gommers, Ralf and Virtanen, Pauli and Cournapeau, David and others},
+  title   = {Array programming with {NumPy}},
+  journal = {Nature},
+  volume  = {585},
+  number  = {7825},
+  pages   = {357--362},
+  year    = {2020},
+  doi     = {10.1038/s41586-020-2649-2}
+}
+
+@article{Hoyer2017,
+  author  = {Hoyer, Stephan and Hamman, Joe},
+  title   = {xarray: {N-D} labeled arrays and datasets in {Python}},
+  journal = {Journal of Open Research Software},
+  volume  = {5},
+  number  = {1},
+  pages   = {10},
   year    = {2017},
-  doi     = {10.1175/BAMS-D-15-00230.1}
+  doi     = {10.5334/jors.148}
 }
 
 @misc{Rhodes2019,
@@ -24,7 +110,8 @@
   title        = {Skyfield: High precision research-grade positions for planets and Earth satellites generator},
   howpublished = {Astrophysics Source Code Library},
   year         = {2019},
-  note         = {ascl:1907.024}
+  note         = {ascl:1907.024},
+  url          = {http://rhodesmill.org/skyfield/}
 }
 
 @article{Folkner2009,
@@ -44,19 +131,4 @@
   pages   = {1329--1336},
   year    = {2018},
   doi     = {10.1175/BAMS-D-17-0277.1}
-}
-
-@misc{CSPPGeo,
-  author       = {{Space Science and Engineering Center (SSEC), University of Wisconsin-Madison}},
-  title        = {{CSPP Geo} Algorithm Integration Team Framework ({AITF})},
-  howpublished = {Cooperative Institute for Meteorological Satellite Studies},
-  year         = {2026},
-  url          = {https://cimss.ssec.wisc.edu/csppgeo/},
-  note         = {TODO: versión usada en operación}
-}
-
-@misc{Pavolonis_TODO,
-  author = {TODO},
-  title  = {TODO: referencia de VOLCAT / producto de ceniza de GOES-R (la que cite el artículo)},
-  year   = {TODO}
 }
