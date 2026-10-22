@@ -207,6 +207,23 @@ Además hay que revisar quién consume los GeoTIFF (vistas de LANOT_tools, kawak
 
 Aquí no se propone cambiar el código sin antes acordar la regla con el autor principal. Lo que sí se propone es dejarla **explícita**: una tabla en `doc/` y una prueba unitaria por cada caso.
 
+**Dos decisiones separadas (2026-10-21).** El artículo se envió hace un año y describe la versión de diciembre (`90ad79f`): no se le agrega nada que dependa del código mejorado (ni la clase 6, ni la corrección del SZA, ni el kernel nuevo). Por eso:
+- **Artículo:** solo se puede ajustar donde el texto no coincide con la versión de diciembre (tabla de abajo), si el autor principal quiere hacerlo en esta revisión.
+- **Operación:** P10, P11 y la fase superenfriada en la clase 6 se deciden para el código actual, con los conteos de abajo. La clase 6 es solo de la operación.
+
+**Diferencias entre el texto del artículo y la versión de diciembre** (verificado en `90ad79f`):
+
+| regla | texto | diciembre | hoy | efecto medido |
+|---|---|---|---|---|
+| CA de día | exige R1.37 > 0.002 | no lo exige | lo exige (mayo) | 3 de 31 737 píxeles de CA (63 escenas, CONUS) |
+| HAP con ΔT2 < −1.5 | pasa a 0 | sigue HAP (LAP sobre agua) | pasa a 0 (mayo) | HAP −41 %, LAP −89 % (CONUS) |
+| regla de fase (P10) | HAP y LAP con hielo, mixta o superenfriada → 0 | ver tabla de P10 | igual que diciembre | 7 HAP y 2 LAP en la región del artículo |
+| ΔT3 sobre la CA (P11) | la CA no cambia | la CA por kernel con ΔT3 ≤ 0 → 0 | igual que diciembre | 857 píxeles de CA en la región |
+| crepúsculo | 70° < SZA < 85° | 70° ≤ SZA ≤ 85° | igual que diciembre | 0 |
+| precisión del SZA | "sub-arcsecond" | error de 0.2° a 0.35° (marco J2000 con tiempo sidéreo de la fecha) | ~0.003° (P6) | 291 píxeles en 13 escenas |
+
+En las dos primeras filas el texto describe lo que hizo mayo ("igualar terascan"), no lo que se usó para los resultados. Si se corrige el artículo, el texto describe diciembre; la versión actual se documenta en el artículo de JOSS.
+
 ### P10. Regla de fase de nube
 
 Hoy (diciembre y mayo, igual):

@@ -82,9 +82,12 @@ Fuente del artículo: ~/Dropbox/cca/lanot/ceniza/fase2/Jimenez et al Ash detecti
   [@Rhodes2019] y las efemérides DE421 [@Folkner2009], y trigonometría esférica
   vectorizada para todos los píxeles. Error ~0.003°.
 - Kernel estadístico (media y desviación locales) con filtros uniformes sobre x y x²:
-  de 7.3 s con 16 procesos a 0.17 s con 1 proceso, con el mismo resultado. Ojo: la
-  sección 2.4 del artículo describe la versión anterior (`generic_filter` y
-  multiprocessing).
+  de 7.3 s con 16 procesos a 0.17 s con 1 proceso, con el mismo resultado. La
+  sección 2.4 del artículo describe la versión de diciembre (`generic_filter` y
+  multiprocessing), y así se queda.
+- Una subsección o párrafo "Changes since the published version": qué cambió desde
+  `90ad79f` y cuánto cambia la clasificación (reglas de mayo, SZA, crepúsculo, C14,
+  clase 6, 0/255). Datos en `doc/2026-10-19_plan_mejoras_operacion.md`.
 - Recorte por región antes de cargar los arreglos y reproyección opcional a
   EPSG:4326 por vecino más cercano (para no mezclar clases).
 - Formato de salida: valores enteros con significado fijo (0, 1–3, 6, 255) y NoData
