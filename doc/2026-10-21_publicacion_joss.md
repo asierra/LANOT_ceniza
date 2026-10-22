@@ -1,7 +1,8 @@
-# Publicación del software en JOSS
+# Publicación del software (SoftwareX o JOSS)
 
 - **Fecha:** 2026-10-21
 - **Estado:** esqueleto en `paper/`. No se envía antes de que se publique el artículo científico.
+- **Revista (2026-10-21):** SoftwareX si pesa más; el borrador de JOSS sirve para ordenar las ideas, como pasó con hpsatviews. Para SoftwareX: molde en `~/lanot/hpsatviews/paper/hpsatviews_softwarex.tex` (tabla de metadatos del código, secciones de impacto y ejemplos).
 
 ## Contexto
 

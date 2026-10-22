@@ -8,7 +8,7 @@
 
 1. **Para decidir:** tres reglas del código actual (fase de nube, ΔT3 sobre la ceniza confirmada, nube superenfriada).
 2. **Artículo científico** (Journal of Applied Volcanology): en seis puntos el texto no coincide con el código con el que se calcularon los resultados. Hay que decidir si se corrigen en esta revisión.
-3. **Software:** las mejoras de octubre no van en el artículo; van en un artículo de software nuevo (JOSS), que se envía cuando se publique el científico.
+3. **Software:** las mejoras de octubre no van en el artículo; van en un artículo de software nuevo (SoftwareX o JOSS), que se envía cuando se publique el científico.
 4. **Perfiles de umbrales por volcán**, para el proyecto de Chile y otros.
 
 Muestra usada en todos los conteos, salvo que se diga otra cosa: 63 escenas CONUS de GOES-16 (2024-02-27 cada hora y cada 5 min de 03:00 a 04:56 UTC, con ceniza de noche; 2019-03-01 de 11:02 a 15:02 UTC cada 15 min). "Región del artículo" = recorte `ashpaper` (102.4–96.3° O, 17.5–22.5° N).
@@ -107,14 +107,14 @@ Valores del GeoTIFF: 0 sin ceniza, 1 CA, 2 HAP, 3 LAP, 6 nube, 255 sin datos. El
 
 ---
 
-## 4. Artículo de software (JOSS)
+## 4. Artículo de software (SoftwareX o JOSS)
 
 - **Por qué ahora:** JOSS pide que el software se haya usado en investigación publicada. Con este artículo se cumple (hpsatviews no pudo publicarse por falta de eso).
 - **Cuándo:** después de que se publique el artículo científico, al que cita.
 - **Autores:** Alejandro Aguilar Sierra (implementación) y Víctor Manuel Jiménez Escudero (algoritmo, artículo y versión en TeraScan). Los demás coautores del artículo, en agradecimientos. **¿De acuerdo?**
 - **Contenido:** qué hace el software, para qué sirve en operación (latencia de ~4.3 min contra ~30 min del VAAC de Washington), cómo está hecho, y qué cambió desde la versión del artículo y cuánto (sección 3).
 - **Licencia:** GPL-3.0-or-later, la que ya tiene el repositorio y la misma de hpsatviews. `CITATION.cff` dice MIT por error. **¿De acuerdo?**
-- Borrador en `paper/paper.md`.
+- **Revista:** SoftwareX si pesa más; JOSS como alternativa. El borrador está en formato JOSS (`paper/paper.md`) y sirve de base para cualquiera de las dos.
 
 ---
 
