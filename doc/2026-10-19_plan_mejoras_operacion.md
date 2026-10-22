@@ -151,7 +151,7 @@ Se sigue la convención de la cadena polar: el log de corridas va en `/var/log/l
 
 Quedan **reservadas**: el código no las produce, pero conservan su entrada en la tabla de colores y en la documentación, por si vuelven.
 
-**6 = nube (ceniza no detectable), decidido el 2026-10-19.** Para distinguir "despejado, sin ceniza" de "no se puede saber porque hay nube", que hoy son el mismo 0. Píxeles que quedan en 0 y cuya fase ACTP es de hielo (4) o mixta (3). La fase superenfriada (2) **no** entra por ahora; se revisa con el autor principal (~2026-10-21), junto con P10 y P11. Las nubes de agua líquida no entran, porque son bajas y la ceniza por encima se sigue viendo. Color: gris (160, 160, 160), opaco o semitransparente según las vistas. Es una etiqueta informativa, no cambia ninguna clase de ceniza, y se puede agregar en un commit aparte después del cambio 0/255.
+**6 = nube (ceniza no detectable), decidido el 2026-10-19.** Para distinguir "despejado, sin ceniza" de "no se puede saber porque hay nube", que hoy son el mismo 0. Píxeles que quedan en 0 y cuya fase ACTP es de hielo (4) o mixta (3). La fase superenfriada (2) **no** entra por ahora; se revisa con el autor principal (reunión pospuesta al viernes 2026-10-23), junto con P10 y P11. Las nubes de agua líquida no entran, porque son bajas y la ceniza por encima se sigue viendo. Color: gris (160, 160, 160), opaco o semitransparente según las vistas. Es una etiqueta informativa, no cambia ninguna clase de ceniza, y se puede agregar en un commit aparte después del cambio 0/255.
 
 | valor | significado | estado |
 |---|---|---|
@@ -247,7 +247,7 @@ El prototipo de referencia usaba las clases 4 y 5 para HAP y LAP con agua líqui
 
 1. ~~Canal de aviso para P4~~: solo logs y estado, como la cadena polar (2026-10-19).
 2. ~~P7: 0 = sin ceniza, 255 = sin datos~~: confirmado (2026-10-19), con 4 y 5 reservados y 6 = nube (fases mixta y hielo).
-3. Con el autor principal (~2026-10-21): P10, P11 y si la fase superenfriada cuenta como nube (6).
+3. Con el autor principal (reunión pospuesta al viernes 2026-10-23): P10, P11 y si la fase superenfriada cuenta como nube (6).
 4. ~~P1: `--jobs`~~: se elimina junto con el kernel vectorizado (2026-10-19).
 
 ## Seguimiento
