@@ -88,7 +88,7 @@ En toda la región (incluye falsos positivos lejos del volcán), el HAP baja 61 
 - **Lo que cambia son los escaneos con HAP o LAP pero sin CA**: de 1 148 a 830 (−28 %). Los días más afectados son los de poca ceniza confirmada: 2023-06-29 (de 53 a 25 escaneos con ceniza), 2023-07-22 (de 211 a 119), 2023-05-19 (de 64 a 43) y 2019-06-14 (de 164 a 115). En los días con emisión fuerte (2023-05-21, 2024-02-26, 2024-10-25) no cambia nada.
 - **Para el artículo:** si los números no se recalcularon después de mayo, los porcentajes de detección de eventos pueden bajar un poco en los eventos que solo se detectaron con HAP. Los que tienen CA no cambian. Para saber cuánto habría que repetir el conteo de eventos con la lista de CENAPRED.
 
-Archivos de esta comparación: `tahan:/data/ceniza/tmp/cmp_mayo_20261021/` (salidas de las dos versiones, `analiza.py`).
+Las salidas de esta comparación se borraron el 2026-10-21. Se pueden repetir en tahan corriendo las dos versiones con los datos de `/data/ceniza/l2` (~1 h con 12 procesos).
 
 No se pueden repetir los 7 casos de validación con VIIRS (Tabla 4): sus L2 no están en tahan ni en cirrus. Habría que regenerarlas desde las L1b.
 
