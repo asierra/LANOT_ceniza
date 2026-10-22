@@ -103,6 +103,12 @@ No cambian el algoritmo del artículo, salvo donde se indica. Van en el artícul
 | 85 pruebas automáticas, con recortes de tres escenas reales (noche, crepúsculo y día) y una prueba por regla | — |
 | Herramientas para correr cualquier versión y comparar salidas píxel por píxel | — |
 
+**Ejemplo en QGIS:** `~/Dropbox/cca/lanot/ceniza/fase2/ejemplo_qgis/ejemplo_ceniza.qgz` (2024-02-27 a las 20:31 y a las 04:06 UTC, con mapa base y el volcán). Al abrir el GeoTIFF, QGIS carga el `.qml` solo: el 0 queda transparente y la leyenda muestra las 5 clases con nombre.
+
+### 3.3 ¿Fue buena idea usar Skyfield para el ángulo cenital solar?
+
+Sí. El código original de los estudiantes (`fase1/Codigo Completo.py`, con pvlib) calculaba **un solo ángulo para toda la imagen, en el subpunto del satélite** (0° N y 75.2° O, a unos 2 600 km del volcán). Toda la escena quedaba en el mismo bloque de día, crepúsculo o noche, y ese bloque correspondía a otro lugar. El diseño de 2025 calcula la posición del Sol una vez por imagen (Skyfield, efemérides JPL DE421) y el ángulo **por píxel** con trigonometría vectorizada. Eso es lo que permite los bloques por píxel que describe el artículo, en segundos. pvlib calcula punto por punto y sería lento con millones de píxeles. El único error fue de uso (marco J2000 con tiempo sidéreo de la fecha) y ya está corregido. Una fórmula analítica (NOAA, ~0.01°) bastaría para umbrales de 70° y 85°, pero no vale la pena cambiar.
+
 Valores del GeoTIFF: 0 sin ceniza, 1 CA, 2 HAP, 3 LAP, 6 nube, 255 sin datos. El 4 y el 5 quedan reservados (eran "cloud" y "noise" en TeraScan).
 
 ---
