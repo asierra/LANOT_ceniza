@@ -39,7 +39,7 @@ Fuente del artículo: ~/Dropbox/cca/lanot/ceniza/fase2/Jimenez et al Ash detecti
   tres bloques de iluminación por ángulo cenital solar, un kernel estadístico de 5×5
   y la fase de nube de ABI.
 - Entradas: L2 CMIP de las bandas C04, C07, C11, C13 y C15, y la fase de nube (ACTP),
-  generadas con CSPP Geo AIT [@CSPPGeo]. Salida: GeoTIFF de una banda con tabla de
+  generadas con CSPP Geo AIT 2.3.1 [@CSPPGeo]. Salida: GeoTIFF de una banda con tabla de
   colores y un estilo `.qml` para QGIS.
 - Corre en operación en LANOT cada 5 minutos. El artículo usó GOES-16; el software
   funciona igual con GOES-19 (GOES-East desde abril de 2025).
@@ -113,17 +113,20 @@ Fuente del artículo: ~/Dropbox/cca/lanot/ceniza/fase2/Jimenez et al Ash detecti
 
 # AI usage disclosure
 
-- Seguir el modelo de hpsatviews: el algoritmo y el diseño son humanos.
-- Declarar: Claude (Anthropic) en la refactorización de mayo de 2026, en la cadena de
-  operación y en el plan de mejoras de octubre de 2026 (pruebas, kernel vectorizado,
-  corrección del ángulo cenital solar, reporte de fallas), y en la redacción de este
-  artículo. ¿Otras herramientas antes de mayo? Confirmar.
-- Toda salida asistida se revisó y validó, con comparaciones píxel por píxel.
+- Modelo: el de hpsatviews, adaptado. El algoritmo es de los autores del artículo; el
+  diseño del software, la arquitectura y las decisiones técnicas son del primer autor.
+- Uso: Claude (Anthropic) como asistente de código, bajo la dirección de un
+  desarrollador con experiencia en cómputo de alto rendimiento y cómputo científico:
+  refactorización (mayo de 2026), cadena de operación y plan de mejoras (octubre de
+  2026: pruebas, kernel vectorizado, corrección del ángulo cenital solar, reporte de
+  fallas) y redacción de este artículo.
+- Todo cambio asistido se revisó y validó, con pruebas y comparaciones píxel por
+  píxel contra la versión del artículo.
 
 # Acknowledgements
 
-- LANOT, financiado por la UNAM (así lo dice el artículo). ¿Agregar el apoyo SECIHTI
-  de hpsatviews (LN-2025-C-102)? Confirmar.
+- LANOT, UNAM, con apoyo del Laboratorio Nacional SECIHTI 2025-2027, proyecto
+  LN-2025-C-102 (el mismo texto que en hpsatviews).
 - SSEC/CIMSS por CSPP Geo, y Kathy Strabala por preparar los datos auxiliares de 2019.
 - Coautores del artículo que no están aquí: Gabriela Gómez-Rodríguez (coautora del
   algoritmo), Amiel Nieto-Torres, Ana Lillian Martin-Del-Pozzo y Jorge Prado-Molina.
