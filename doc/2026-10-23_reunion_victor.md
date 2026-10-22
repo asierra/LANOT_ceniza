@@ -105,7 +105,7 @@ No cambian el algoritmo del artículo, salvo donde se indica. Van en el artícul
 
 Valores del GeoTIFF: 0 sin ceniza, 1 CA, 2 HAP, 3 LAP, 6 nube, 255 sin datos. El 4 y el 5 quedan reservados (eran "cloud" y "noise" en TeraScan).
 
-**Ejemplo en QGIS:** `~/Dropbox/cca/lanot/ceniza/fase2/ejemplo_qgis/ejemplo_ceniza.qgz` (2024-02-27 a las 20:31 y a las 04:06 UTC, con mapa base y el volcán). Al abrir el GeoTIFF, QGIS carga el `.qml` solo: el 0 queda transparente y la leyenda muestra las 5 clases con nombre.
+**Ejemplo en QGIS:** `~/Dropbox/cca/lanot/ceniza/fase2/ejemplo_qgis/ejemplo2_ceniza.qgz` (2024-02-27 a las 20:31 y a las 04:06 UTC, en geográficas, con los estados de México y el volcán). Al abrir el GeoTIFF, QGIS carga el `.qml` solo: el 0 queda transparente y la leyenda muestra las 5 clases con nombre.
 
 ### 3.3 ¿Fue buena idea usar Skyfield para el ángulo cenital solar?
 
