@@ -230,11 +230,42 @@ El prototipo de referencia usaba las clases 4 y 5 para HAP y LAP con agua líqui
 
 **Decisión pendiente:** cuál es la regla buena. Después: prueba unitaria por caso y comparación con P0.
 
+**Medido (2026-10-21).** Las mismas 63 escenas, con la versión actual (`8dd7d78`), en CONUS completo y en la región del artículo (`ashpaper`). Píxeles HAP y LAP que llegan a la regla de fase (después de los filtros de ΔT2 y ΔT3), por fase:
+
+| caso | código | texto | región del artículo | CONUS |
+|---|---|---|---|---|
+| HAP, superenfriada (2) | sigue HAP | 0 | 1 (1 escena) | 1 094 |
+| HAP, mixta (3) | sigue HAP | 0 | 6 (4 escenas) | 5 092 |
+| HAP, desconocida (5) | sigue HAP | no dice | 0 | 546 |
+| LAP, agua líquida (1) | 0 | no dice | 2 (1 escena) | 1 979 |
+| LAP, desconocida (5) | 0 | no dice | 0 | 196 |
+| *referencia:* HAP final | | | 836 | 50 773 |
+
+- En la región del artículo, la diferencia entre el código y el texto es de **7 píxeles de HAP** (0.8 %) en 63 escenas, más 2 de LAP. Fuera de la región (CONUS) es mayor, pero ahí casi todo lo que se clasifica no es ceniza del Popocatépetl.
+- Clase 6: si la fase superenfriada contara como nube, 2 894 píxeles de la región pasarían de 0 a 6 (la clase 6 crecería 7 %). No cambia ninguna clase de ceniza.
+- Los límites exactos (el texto usa `ΔT3 < 0` y `< 1.5`; el código, `≤`) no importan: 0 píxeles en la región y 8 en CONUS.
+- Los resultados del artículo se calcularon con la regla del código (diciembre y ahora es la misma). Cualquiera de las dos opciones es defendible por el efecto; la decisión es cuál describe el artículo.
+
 ### P11. Filtro de ΔT3 sobre la ceniza confirmada
 
 **¿Modifica la salida?** Sí, pero solo en un caso. La regla `(clase ≤ 2) & (ΔT3 ≤ 0) → 0` también alcanza a la ceniza confirmada (1). La confirmada por umbrales ya exige ΔT3 > 2, así que no le afecta. La que **sí** se elimina es la **confirmada por el kernel** (`nhood == 1`, que no exige ΔT3) cuando ΔT3 ≤ 0. El texto dice que la confirmada "remained unchanged".
 
 **Decisión pendiente:** si el filtro debe aplicarse solo a HAP (como dice el texto) o también a la ceniza confirmada por el kernel (como hace el código). Con P0 se puede contar cuántos píxeles afecta antes de decidir.
+
+**Medido (2026-10-21)**, en las mismas 63 escenas:
+
+| | región del artículo | CONUS |
+|---|---|---|
+| CA borrada por `ΔT3 ≤ 0` (toda es CA solo por kernel) | **857** (42 escenas) | 95 642 (62 escenas) |
+| *referencia:* CA final | 3 100 | 31 734 |
+| *referencia:* CA final solo por kernel | 298 | 19 762 |
+
+- Si se siguiera el texto, la CA de la región crecería 28 % (y se triplicaría en CONUS). Es mucho más que P10.
+- **No parece ceniza:** los 857 píxeles son todos de noche; ninguno está a menos de 50 km del volcán y solo 28 tocan la CA que queda. 637 están sobre cielo despejado (fase 0), con ΔT3 de −2.6 a 0 K (mediana −1.15). En las escenas de 2024-02-27 de 08:00 a 13:00 UTC crecen hasta 159 por escena, lejos de la pluma. Es lo que se espera de superficies frías o nubes de noche, donde ΔT3 negativo es común.
+- No hay verdad de campo para estos píxeles; la conclusión se basa en la distancia al volcán, la vecindad con la pluma y el valor de ΔT3.
+- **Recomendación:** dejar el código como está (el filtro también se aplica a la CA por kernel) y corregir el texto del artículo, que dice "the Confirmed Ash (CA) category remained unchanged". Así el texto describe el algoritmo con el que se calcularon los resultados.
+
+Método: `classify_ash` envuelta en un script que recalcula las etapas intermedias y comprueba en cada escena que el resultado final sea idéntico al de la función (lo fue en las 126 corridas).
 
 ---
 
