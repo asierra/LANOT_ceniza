@@ -19,7 +19,7 @@ Se borraron el `paper.md` y el `references.bib` de la raíz (esqueleto de diciem
 
 ## Antes de enviar
 
-- [ ] Revista, volumen y DOI del artículo (título y autores ya están).
+- [ ] Volumen y DOI del artículo (Journal of Applied Volcanology; título y autores ya están).
 - [ ] Versión de CSPP Geo AIT usada en operación.
 - [ ] La sección 2.4 del artículo describe la implementación de diciembre: `generic_filter` y multiprocessing, "sub-arcsecond accuracy", ~10 s por escena CONUS y "0 = no ash". El texto de JOSS describe la versión actual; conviene que las dos no se contradigan (ver con Víctor).
 - [ ] El artículo dice que HAP y LAP con fase superenfriada pasan a sin ceniza (P10 del plan de mejoras); afecta también a la clase 6.
