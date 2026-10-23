@@ -7,7 +7,7 @@ name = "lanot_ceniza"
 version = "0.2.0"
 description = "Paquete mínimo instalable para LANOT_ceniza."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { file = "LICENSE" }
 authors = [
   { name = "A. Sierra" },

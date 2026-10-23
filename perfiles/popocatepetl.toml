@@ -1,0 +1,98 @@
+# Perfil de umbrales del Popocatépetl: los valores con los que corre la operación.
+#
+# Diferencias de temperatura de brillo (K):
+#   ΔT1 = BT13 − BT15    ΔT2 = BT11 − BT13    ΔT3 = BT07 − BT13
+# R1.37 es la reflectancia de la banda C04. Todas las comparaciones son estrictas
+# (< o >) salvo donde se indica.
+#
+# Clases de ceniza: ca (confirmada), hap (probabilidad alta), lap (probabilidad baja)
+# y sin_ceniza. La estructura del algoritmo (tres bloques de iluminación, fórmula del
+# kernel, orden de los filtros) está en el código; aquí solo van los números.
+# Diseño: doc/2026-10-21_perfiles_umbrales.md
+
+[perfil]
+nombre = "popocatepetl"
+descripcion = "Calibrado para el Popocatépetl (artículo de Journal of Applied Volcanology)"
+estado = "operacion"
+
+[iluminacion]
+# Ángulo cenital solar (SZA) en grados.
+# día: SZA < dia_max    noche: SZA > noche_min    crepúsculo: dia_max ≤ SZA ≤ noche_min
+dia_max = 70.0
+noche_min = 85.0
+
+[kernel]
+# Textura de ΔT1 en una ventana de tamano × tamano: un píxel se marca si
+# ΔT1 − media·σ < umbral y además ΔT1 < ca_dt1_max (CA) o ΔT1 < hap_dt1_max (HAP).
+# Lo que marca el kernel entra como CA o HAP en los tres bloques, sin las otras pruebas.
+tamano = 5
+umbral = -1.0
+ca_dt1_max = 0.0
+hap_dt1_max = 1.0
+
+# --- Pruebas por bloque de iluminación --------------------------------------------
+# dt1_max: ΔT1 < valor    dt2_min: ΔT2 > valor    dt3_min: ΔT3 > valor
+# r137_min: R1.37 > valor (opcional)    bt13_max: BT13 < valor (opcional)
+
+[noche.ca]
+dt1_max = 0.0
+dt2_min = 0.0
+dt3_min = 2.0
+
+[noche.hap]
+dt1_max = 1.0
+dt2_min = -0.5
+dt3_min = 2.0
+
+[crepusculo.ca]
+dt1_max = 0.0
+dt2_min = 0.0
+dt3_min = 2.0
+
+[crepusculo.hap]
+dt1_max = 1.0
+dt2_min = -0.5
+dt3_min = 2.0
+r137_min = 0.002
+bt13_max = 273.15
+
+[dia.ca]
+dt1_max = 0.0
+dt2_min = 0.0
+dt3_min = 2.0
+r137_min = 0.002
+
+[dia.hap]
+dt1_max = 1.0
+dt2_min = -0.5
+dt3_min = 2.0
+r137_min = 0.002
+
+# --- Filtros, en este orden -------------------------------------------------------
+
+[refinamiento_hap]
+# HAP con ΔT2 ≥ hap_dt2_min sigue HAP; con ΔT2 ≥ lap_dt2_min pasa a LAP; si no, sin ceniza.
+hap_dt2_min = -1.0
+lap_dt2_min = -1.5
+
+[filtro_dt3]
+# Se borra (sin ceniza) si ΔT3 ≤ valor.
+ca_hap_max = 0.0
+lap_max = 1.5
+
+[fase]
+# Clase × fase de la nube (producto ACTP) → clase resultante.
+# Fases: despejado, agua, superenfriada, mixta, hielo, desconocida.
+ca  = { despejado = "ca",  agua = "ca",         superenfriada = "ca",         mixta = "ca",         hielo = "ca",         desconocida = "ca" }
+hap = { despejado = "hap", agua = "lap",        superenfriada = "hap",        mixta = "hap",        hielo = "sin_ceniza", desconocida = "hap" }
+lap = { despejado = "lap", agua = "sin_ceniza", superenfriada = "sin_ceniza", mixta = "sin_ceniza", hielo = "sin_ceniza", desconocida = "sin_ceniza" }
+# Dato auxiliar, no es clase de ceniza: "sin ceniza" bajo estas fases se guarda como
+# 6 = nube, ceniza no detectable.
+nube = ["mixta", "hielo"]
+
+[region]
+dominio = "C"                         # C = CONUS, F = disco completo
+volcan = { lat = 19.023, lon = -98.622 }
+# La región se da con un nombre predefinido (recorte) o con puntos [lon, lat]:
+# 2 puntos = esquinas opuestas de un rectángulo; 3 o más = polígono.
+recorte = "ashpaper"

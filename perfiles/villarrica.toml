@@ -1,0 +1,82 @@
+# EJEMPLO, SIN CALIBRAR. Perfil para el proyecto de Chile (repositorio lanot-chile).
+#
+# Los umbrales son una COPIA de perfiles/popocatepetl.toml: muestran qué habría que
+# calibrar, no son valores para el Villarrica. La región sí es la del proyecto: el
+# cuadrilátero que antes venía del shapefile "campo villarrica".
+# La explicación de cada sección está en perfiles/popocatepetl.toml.
+
+[perfil]
+nombre = "villarrica"
+descripcion = "Ejemplo para el Villarrica y la zona del proyecto de Chile"
+estado = "ejemplo"
+
+[iluminacion]
+# Por revisar: el artículo pide ajustar estos límites a la latitud, y la zona va de
+# 28° S a 47° S.
+dia_max = 70.0
+noche_min = 85.0
+
+[kernel]
+tamano = 5
+umbral = -1.0
+ca_dt1_max = 0.0
+hap_dt1_max = 1.0
+
+[noche.ca]
+dt1_max = 0.0
+dt2_min = 0.0
+dt3_min = 2.0
+
+[noche.hap]
+dt1_max = 1.0
+dt2_min = -0.5
+dt3_min = 2.0
+
+[crepusculo.ca]
+dt1_max = 0.0
+dt2_min = 0.0
+dt3_min = 2.0
+
+[crepusculo.hap]
+dt1_max = 1.0
+dt2_min = -0.5
+dt3_min = 2.0
+r137_min = 0.002
+bt13_max = 273.15
+
+[dia.ca]
+dt1_max = 0.0
+dt2_min = 0.0
+dt3_min = 2.0
+r137_min = 0.002
+
+[dia.hap]
+dt1_max = 1.0
+dt2_min = -0.5
+dt3_min = 2.0
+r137_min = 0.002
+
+[refinamiento_hap]
+hap_dt2_min = -1.0
+lap_dt2_min = -1.5
+
+[filtro_dt3]
+ca_hap_max = 0.0
+lap_max = 1.5
+
+[fase]
+ca  = { despejado = "ca",  agua = "ca",         superenfriada = "ca",         mixta = "ca",         hielo = "ca",         desconocida = "ca" }
+hap = { despejado = "hap", agua = "lap",        superenfriada = "hap",        mixta = "hap",        hielo = "sin_ceniza", desconocida = "hap" }
+lap = { despejado = "lap", agua = "sin_ceniza", superenfriada = "sin_ceniza", mixta = "sin_ceniza", hielo = "sin_ceniza", desconocida = "sin_ceniza" }
+nube = ["mixta", "hielo"]
+
+[region]
+dominio = "F"                         # disco completo, cada 10 min
+volcan = { lat = -39.42, lon = -71.93 }
+# Cuadrilátero de la zona de estudio, [lon, lat].
+puntos = [
+  [-86.2941, -46.4586],
+  [-81.5787, -28.0659],
+  [-48.4401, -29.3967],
+  [-44.6973, -46.9981],
+]
