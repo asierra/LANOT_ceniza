@@ -27,7 +27,7 @@ El sistema utiliza múltiples canales infrarrojos y productos derivados para:
 
 ### Requisitos previos
 
-- Python 3.10 o superior
+- Python 3.11 o superior
 - pip (gestor de paquetes de Python)
 
 ### Configuración del ambiente
@@ -238,6 +238,7 @@ LANOT_ceniza/
 ├── pyproject.toml      # Configuración del paquete instalable
 ├── ceniza.qml          # Estilo de QGIS para los GeoTIFF (lo escribe también junto a cada salida)
 ├── ash.cpt             # Paleta de colores histórica (incluye las clases 4 y 5, ya no usadas)
+├── perfiles/           # Umbrales y región por volcán (TOML); aún no los lee el programa
 ├── tests/              # Pruebas (pytest) y recortes de datos reales para la regresión
 ├── herramientas/       # Comparación entre versiones y generación de datos de prueba
 ├── operacion/          # Cadena de baja latencia en tahan (ver operacion/README.md)
@@ -283,7 +284,7 @@ El algoritmo aplica diferentes umbrales según el ángulo cenital solar:
 - Media confianza: delta1 < 1, delta2 > -0.5, delta3 > 2
 
 **Crepúsculo (70° ≤ SZA ≤ 85°):**
-- Similar a noche pero con restricción adicional: C04 > 0.002 y C13 < 273.15K
+- Igual que de noche; la media confianza exige además C04 > 0.002 y C13 < 273.15 K
 
 **Día (SZA < 70°):**
 - Similar a noche pero con restricción de reflectancia: C04 > 0.002
@@ -304,7 +305,11 @@ Usando el producto ACTP (Cloud Top Phase):
 - La ceniza confirmada no cambia.
 - Lo que queda sin ceniza bajo nube de fase mixta (3) o hielo (4) se marca como nube (6): ahí la ceniza no se puede ver.
 
-La tabla completa de reglas, y las que están en revisión, está en [el plan de octubre de 2026](doc/2026-10-19_plan_mejoras_operacion.md) (P10, P11) y en `tests/test_clasificacion.py`.
+La tabla completa de reglas está en [el plan de octubre de 2026](doc/2026-10-19_plan_mejoras_operacion.md) y en `tests/test_clasificacion.py`. En la reunión del 2026-10-23 se decidió dejar P10, P11 y la nube superenfriada como están.
+
+#### Perfiles de umbrales por volcán
+
+`perfiles/popocatepetl.toml` tiene todos los números de esta sección (umbrales por bloque y clase, kernel, límites del SZA, tabla de fase) y la región; `perfiles/villarrica.toml` es un ejemplo sin calibrar para el proyecto de Chile. **El programa todavía no los lee**: los valores siguen en `classify_ash`, y `tests/test_perfiles.py` comprueba que el perfil del Popocatépetl diga lo mismo que el código. El diseño y el plan para usarlos están en [doc/2026-10-21_perfiles_umbrales.md](doc/2026-10-21_perfiles_umbrales.md).
 
 ### Proyección y georreferenciación
 
