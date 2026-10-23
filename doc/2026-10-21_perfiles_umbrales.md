@@ -49,8 +49,41 @@ La zona de Chile es el cuadrilátero que antes venía del shapefile `campo villa
 
 **Corrección pendiente del recorte:** `process_instant` pasa a la proyección GOES solo dos esquinas (SO y NE). En esa proyección el rectángulo se deforma y se puede perder una franja; lanot-chile ya transforma las cuatro. Hay que transformar las cuatro esquinas y puntos a lo largo de los bordes. En el Popocatépetl la diferencia es de uno o dos píxeles; en Chile, a 40° S y en disco completo, puede ser mayor. Va en un commit aparte.
 
+## Plan para usar los perfiles y regiones de más de dos esquinas (2026-10-23)
+
+Cuatro commits separados. Los tres primeros no cambian la operación del Popocatépetl.
+
+### 1. Regiones como lista de puntos y recorte con bordes densificados
+
+- Toda región es una lista de puntos `[lon, lat]`: `CLIP_REGIONS` pasa a 2 puntos por región y `--clip` sigue aceptando sus nombres.
+- `process_instant` transforma a la proyección GOES todos los vértices y puntos intermedios de cada borde, y toma el mínimo y máximo de x, y (hoy solo transforma las esquinas SO y NE, `detect_ash.py:700-708`). Un vértice fuera del disco visible es error.
+- La reproyección a lat/lon usa el rectángulo que contiene a la región, no un `bbox` de 4 números.
+- Las pruebas de regresión no usan recorte. Se comprueba con escaneos reales en tahan que la salida de `ashpapergeo` no cambia (ya hay un margen de 10 % antes de reproyectar).
+
+### 2. `classify_ash` con perfil
+
+- `carga_perfil(nombre o ruta)` en `detect_ash.py`, con la validación estricta que hoy está en `tests/test_perfiles.py`. Opción `--perfil`; sin ella, `popocatepetl`.
+- `classify_ash` recibe el perfil y deja de tener números escritos; `FASES_NUBE` y `kernel_size` salen del perfil.
+- Las pruebas de regresión deben dar los mismos píxeles. El clasificador de referencia de `test_perfiles.py` se retira: la prueba compara `classify_ash` con perfiles modificados.
+- El GeoTIFF guarda el nombre y el hash del perfil.
+- **Instalación:** el wheel solo incluye `detect_ash.py` y `compare_ash.py`, así que `instala.sh` no copiaría `perfiles/` a `/opt/lanot/ceniza`. Incluir la carpeta en el paquete (`pyproject.toml`) y buscar los perfiles relativos al módulo.
+
+### 3. Polígonos y `--geo`
+
+- Con 3 o más puntos, después de clasificar (para que el kernel cerca del borde vea a sus vecinos reales), lo que queda fuera del polígono pasa a 255, con `rasterio.features.geometry_mask` sobre la malla de salida (GOES o lat/lon). Los bordes del polígono son rectos en lat/lon y se densifican al transformarlos.
+- Opción `--geo` para reproyectar a lat/lon una región dada con puntos, que no tiene nombre. El sufijo `geo` de `--clip` (`ashpapergeo`) sigue funcionando.
+- `--clip` manda sobre la región del perfil, así `procesa_ceniza.sh` no cambia.
+- Prueba con el cuadrilátero de `perfiles/villarrica.toml` sobre una escena sintética.
+
+### 4. Dominio del perfil (disco completo, para Chile)
+
+Se puede dejar para cuando se arme lo de Chile.
+
+- `main` llama a `get_moment()` sin dominio: sin `-m` calcula el instante como CONUS. Usar el dominio del perfil.
+- Los rangos de instantes y el reporte de fallas usan 5 min; el disco completo es cada 10 min.
+- `procesa_ceniza.sh` es una cadena solo CONUS (L1b de `conus`, CSPP en ese dominio). Una cadena de disco completo es trabajo aparte, probablemente del repo nuevo de Chile.
+- La resolución de la salida en lat/lon está fija en 0.02°; podría pasar al perfil.
+
 ## Pendiente
 
-- Paso 2: `classify_ash` recibe el perfil; `--perfil NOMBRE|RUTA.toml`; metadatos del GeoTIFF; las pruebas de regresión no deben cambiar.
 - Preguntar a Víctor qué valores cambian de un volcán a otro, y si basta un solo par de límites del SZA para una zona de 19° de latitud.
-- Revisar con el repositorio del proyecto de Chile qué necesita (posiblemente disco completo, cada 10 min). La búsqueda de archivos ya acepta el dominio F, pero la lógica de instantes y de desfase supone CONUS en algunos lugares.
