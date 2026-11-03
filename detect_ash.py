@@ -56,11 +56,12 @@ def carga_efemerides():
     loader = Loader(str(carpeta), verbose=False)
     return loader("de421.bsp"), loader.timescale()
 
-# Regiones predefinidas para recorte [lon_min, lat_max, lon_max, lat_min]
+# Regiones predefinidas para recorte, como puntos [lon, lat]: 2 puntos son esquinas opuestas
+# de un rectángulo (aquí, suroeste y noreste); 3 o más, los vértices de un polígono.
 CLIP_REGIONS = {
-    'centromex': [-107.2319400, 22.7180385, -93.8363933, 14.9386282],
-    'popocatepetl': [-100.2622042, 20.5800993, -96.8495200, 18.2893953],
-    'ashpaper': [-102.418,22.474,-96.294,17.547],
+    'centromex': [[-107.2319400, 14.9386282], [-93.8363933, 22.7180385]],
+    'popocatepetl': [[-100.2622042, 18.2893953], [-96.8495200, 20.5800993]],
+    'ashpaper': [[-102.418, 17.547], [-96.294, 22.474]],
 }
 
 # Valores de la clasificación en el GeoTIFF: (color RGB, nombre en la leyenda, alfa en QGIS).
@@ -107,10 +108,69 @@ def estilo_qml():
 """
 
 
-# Generar versiones "geo" de las regiones automáticamente
-CLIP_REGIONS_WITH_GEO = CLIP_REGIONS.copy()
-for region_name, bbox in CLIP_REGIONS.items():
-    CLIP_REGIONS_WITH_GEO[f"{region_name}geo"] = bbox
+# Nombres que acepta --clip: cada región, y la misma con 'geo' al final para reproyectar a lat/lon.
+NOMBRES_CLIP = [n + sufijo for n in CLIP_REGIONS for sufijo in ("", "geo")]
+
+
+def vertices_region(puntos):
+    """
+    Vértices [lon, lat] del contorno de una región. Con 2 puntos (esquinas opuestas) da las
+    4 esquinas del rectángulo; con 3 o más, los mismos puntos.
+    """
+    v = np.asarray(puntos, dtype=np.float64)
+    if v.ndim != 2 or v.shape[1] != 2 or len(v) < 2:
+        raise ValueError(f"Una región es una lista de 2 o más puntos [lon, lat]; se recibió {puntos}")
+    if not np.isfinite(v).all():
+        raise ValueError(f"Región con coordenadas no finitas: {puntos}")
+    if len(v) == 2:
+        (lon0, lon1), (lat0, lat1) = np.sort(v[:, 0]), np.sort(v[:, 1])
+        if lon0 == lon1 or lat0 == lat1:
+            raise ValueError(f"Las dos esquinas de la región no forman un rectángulo: {puntos}")
+        v = np.array([[lon0, lat0], [lon1, lat0], [lon1, lat1], [lon0, lat1]])
+    return v
+
+
+def limites_region(puntos):
+    """Rectángulo (lon_min, lat_min, lon_max, lat_max) que contiene a la región."""
+    v = vertices_region(puntos)
+    return v[:, 0].min(), v[:, 1].min(), v[:, 0].max(), v[:, 1].max()
+
+
+def densifica(vertices, paso=0.05):
+    """
+    Puntos a lo largo de los bordes del contorno cerrado, separados a lo más `paso` grados.
+    Los bordes son rectos en lat/lon; en la proyección GOES se curvan, así que no basta con
+    transformar los vértices.
+    """
+    a = np.asarray(vertices, dtype=np.float64)
+    b = np.roll(a, -1, axis=0)
+    tramos = []
+    for p, q in zip(a, b):
+        n = max(1, int(np.ceil(np.abs(q - p).max() / paso)))
+        t = np.arange(n)[:, None] / n
+        tramos.append(p + t * (q - p))
+    return np.concatenate(tramos)
+
+
+def limites_goes(puntos, transformer, margen=0.0):
+    """
+    Rectángulo (x_min, y_min, x_max, y_max), en la proyección GOES, que contiene a la región.
+    Transforma los bordes densificados, no solo dos esquinas. Con `margen` > 0 también incluye
+    el rectángulo lat/lon de la región agrandado esa fracción por lado (lo que salga del
+    disco visible en ese margen se ignora). Error si la región sale del disco visible.
+    """
+    v = vertices_region(puntos)
+    x, y = transformer.transform(*densifica(v).T)
+    if not (np.isfinite(x).all() and np.isfinite(y).all()):
+        raise ValueError(f"La región sale del disco visible del satélite: {puntos}")
+    if margen > 0:
+        lon_min, lat_min, lon_max, lat_max = limites_region(puntos)
+        dlon, dlat = (lon_max - lon_min) * margen, (lat_max - lat_min) * margen
+        exp = [[lon_min - dlon, lat_min - dlat], [lon_max + dlon, lat_max + dlat]]
+        xm, ym = transformer.transform(*densifica(vertices_region(exp)).T)
+        ok = np.isfinite(xm) & np.isfinite(ym)
+        x, y = np.concatenate([x, xm[ok]]), np.concatenate([y, ym[ok]])
+    return x.min(), y.min(), x.max(), y.max()
  
 def get_moment(is_conus=True):
     """
@@ -641,13 +701,13 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
         if base_region not in CLIP_REGIONS:
             raise ValueError(f"Región '{base_region}' no reconocida. Regiones disponibles: {list(CLIP_REGIONS.keys())}")
         
-        bbox = CLIP_REGIONS[base_region]
+        puntos = CLIP_REGIONS[base_region]
         if reproject_to_geo:
-            logger.debug(f"Se aplicará recorte a región '{base_region}' y reproyección a lat/lon: {bbox}")
+            logger.debug(f"Se aplicará recorte a región '{base_region}' y reproyección a lat/lon: {puntos}")
         else:
-            logger.debug(f"Se aplicará recorte a región '{base_region}': {bbox}")
+            logger.debug(f"Se aplicará recorte a región '{base_region}': {puntos}")
     else:
-        bbox = None
+        puntos = None
 
     carpeta = carpeta_del_instante(data_path, instant_info, use_date_tree)
     file_paths, faltan = busca_archivos(carpeta, instant_info[0])
@@ -679,36 +739,15 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     y_coords_full = ds_c07['y'].values.astype(np.float64) * goes_height
     
     # --- Determinar índices de recorte si se especificó una región ---
-    if bbox:
-        logger.debug(f"\nCalculando índices de recorte para región: {bbox}")
-        # bbox = [lon_min, lat_max, lon_max, lat_min]
-        lon_min, lat_max, lon_max, lat_min = bbox
-        
-        # Transformar coordenadas geográficas a proyección GOES
+    if puntos:
+        logger.debug(f"\nCalculando índices de recorte para región: {puntos}")
         transformer_to_goes = Transformer.from_crs("EPSG:4326", crs_goes, always_xy=True)
-        
-        # Si vamos a reproyectar a geográficas, expandir el bbox en proyección GOES
-        # para asegurar cobertura completa después de la reproyección
-        if reproject_to_geo:
-            # Expandir el bbox geográfico en ~10% en cada dirección
-            lon_margin = (lon_max - lon_min) * 0.1
-            lat_margin = (lat_max - lat_min) * 0.1
-            
-            lon_min_exp = lon_min - lon_margin
-            lon_max_exp = lon_max + lon_margin
-            lat_min_exp = lat_min - lat_margin
-            lat_max_exp = lat_max + lat_margin
-            
-            logger.debug(f"Bbox expandido para reproyección: lon[{lon_min_exp:.4f}, {lon_max_exp:.4f}], lat[{lat_min_exp:.4f}, {lat_max_exp:.4f}]")
-            
-            # Usar el bbox expandido para el recorte en GOES
-            x_min, y_min = transformer_to_goes.transform(lon_min_exp, lat_min_exp)
-            x_max, y_max = transformer_to_goes.transform(lon_max_exp, lat_max_exp)
-        else:
-            # Sin reproyección, usar el bbox exacto
-            x_min, y_min = transformer_to_goes.transform(lon_min, lat_min)
-            x_max, y_max = transformer_to_goes.transform(lon_max, lat_max)
-        
+        # Si se va a reproyectar a lat/lon, se recorta con un margen de 10 % por lado para
+        # que la reproyección no quede con huecos en las orillas.
+        x_min, y_min, x_max, y_max = limites_goes(puntos, transformer_to_goes,
+                                                  margen=0.1 if reproject_to_geo else 0.0)
+        logger.debug(f"Límites en la proyección GOES (m): x[{x_min:.0f}, {x_max:.0f}], y[{y_min:.0f}, {y_max:.0f}]")
+
         # Encontrar los índices más cercanos en los arrays de coordenadas
         # Para x (columnas)
         x_idx_min = np.argmin(np.abs(x_coords_full - x_min))
@@ -865,12 +904,11 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     output_da.rio.write_nodata(255, inplace=True)
 
     # Reproyectar a coordenadas geográficas si se especificó
-    if bbox and reproject_to_geo:
+    if puntos and reproject_to_geo:
         logger.debug("\nReproyectando a coordenadas geográficas (EPSG:4326)...")
         
-        # Definir los límites EXACTOS en coordenadas geográficas (bbox original, sin expansión)
-        # bbox = [lon_min, lat_max, lon_max, lat_min]
-        lon_min, lat_max, lon_max, lat_min = bbox
+        # Límites EXACTOS en lat/lon: el rectángulo que contiene a la región, sin margen
+        lon_min, lat_min, lon_max, lat_max = limites_region(puntos)
         
         logger.debug(f"Límites geográficos objetivo: lon[{lon_min}, {lon_max}], lat[{lat_min}, {lat_max}]")
         
@@ -880,14 +918,14 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
         # Esto es aproximadamente equivalente a la resolución GOES en esta latitud
         target_resolution_deg = 0.02
         
-        # Calcular las dimensiones necesarias para cubrir el bbox con esta resolución
+        # Calcular las dimensiones necesarias para cubrir el rectángulo con esta resolución
         lon_range = lon_max - lon_min
         lat_range = lat_max - lat_min
         
         dst_width = int(np.round(lon_range / target_resolution_deg))
         dst_height = int(np.round(lat_range / target_resolution_deg))
         
-        # Ahora calcular la resolución EXACTA necesaria para que el bbox sea preciso
+        # Ahora calcular la resolución EXACTA necesaria para que el rectángulo sea preciso
         exact_lon_res = lon_range / dst_width
         exact_lat_res = lat_range / dst_height
         
@@ -959,7 +997,7 @@ def main():
                         help="Ruta de salida para el GeoTIFF. Puede ser un archivo (ej: 'resultado.tif') o un directorio (ej: '/data/salida/'). "
                              "Si es un directorio, se genera automáticamente el nombre 'ceniza_[instante].tif' (o con sufijo '_geo' si se reproyecta). "
                              "Por defecto: './ceniza_[instante].tif'")
-    parser.add_argument('-c', '--clip', type=str, choices=list(CLIP_REGIONS_WITH_GEO.keys()), default=None, 
+    parser.add_argument('-c', '--clip', type=str, choices=NOMBRES_CLIP, default=None, 
                         help=f"Región para recortar el resultado final. Agrega 'geo' al final para reproyectar a lat/lon. Opciones: {', '.join(CLIP_REGIONS.keys())} (o con sufijo 'geo')")
     parser.add_argument('--date-tree', action='store_true', 
                         help="Usa estructura de directorios YYYY/MM/DD dentro de --path para localizar los archivos según el instante especificado")

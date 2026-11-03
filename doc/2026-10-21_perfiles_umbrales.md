@@ -1,7 +1,7 @@
 # Umbrales configurables por volcán (perfiles)
 
 - **Fecha:** 2026-10-21
-- **Estado:** paso 1 hecho (2026-10-23): los perfiles existen y una prueba los compara con el código; `classify_ash` todavía no los lee.
+- **Estado:** perfiles y prueba hechos (2026-10-23). Del plan de 4 commits, el 1 (regiones y recorte) está hecho (2026-11-03); `classify_ash` todavía no lee los perfiles.
 
 ## Por qué
 
@@ -47,7 +47,7 @@ Un nombre predefinido (`recorte = "ashpaper"`) o una lista de puntos `[lon, lat]
 
 La zona de Chile es el cuadrilátero que antes venía del shapefile `campo villarrica` de lanot-chile (28° a 47° S, 86° a 45° O); el proyecto deja de usar shapefiles. Los rectángulos de `volcanes.csv` de lanot-chile son de `ash.py`, que ya no se usa.
 
-**Corrección pendiente del recorte:** `process_instant` pasa a la proyección GOES solo dos esquinas (SO y NE). En esa proyección el rectángulo se deforma y se puede perder una franja; lanot-chile ya transforma las cuatro. Hay que transformar las cuatro esquinas y puntos a lo largo de los bordes. En el Popocatépetl la diferencia es de uno o dos píxeles; en Chile, a 40° S y en disco completo, puede ser mayor. Va en un commit aparte.
+**Corrección pendiente del recorte:** `process_instant` pasa a la proyección GOES solo dos esquinas (SO y NE). En esa proyección el rectángulo se deforma y se puede perder una franja; lanot-chile ya transforma las cuatro. Hay que transformar las cuatro esquinas y puntos a lo largo de los bordes. Va en un commit aparte. (Corregido el 2026-11-03; ver el paso 1 del plan: en México no había diferencia.)
 
 ## Plan para usar los perfiles y regiones de más de dos esquinas (2026-10-23)
 
@@ -59,6 +59,11 @@ Cuatro commits separados. Los tres primeros no cambian la operación del Popocat
 - `process_instant` transforma a la proyección GOES todos los vértices y puntos intermedios de cada borde, y toma el mínimo y máximo de x, y (hoy solo transforma las esquinas SO y NE, `detect_ash.py:700-708`). Un vértice fuera del disco visible es error.
 - La reproyección a lat/lon usa el rectángulo que contiene a la región, no un `bbox` de 4 números.
 - Las pruebas de regresión no usan recorte. Se comprueba con escaneos reales en tahan que la salida de `ashpapergeo` no cambia (ya hay un margen de 10 % antes de reproyectar).
+
+**Hecho el 2026-11-03.** `vertices_region`, `densifica` (un punto cada 0.05° a lo largo de los bordes) y `limites_goes` en `detect_ash.py`; pruebas en `tests/test_region.py`. Resultados:
+
+- En las tres regiones de México (`centromex`, `popocatepetl`, `ashpaper`) el rectángulo en la proyección GOES es **idéntico** al de antes, no uno o dos píxeles mayor como se esperaba: al noroeste del punto subsatelital (75° O, ecuador) las esquinas SO y NE ya son los extremos. Las salidas con y sin `geo` sobre los datos de prueba son iguales píxel por píxel, así que no hace falta la comprobación en tahan.
+- En Chile sí importa: con el rectángulo que contiene a la zona, el método de dos esquinas perdía unos 136 píxeles al oeste y 5 al sur.
 
 ### 2. `classify_ash` con perfil
 

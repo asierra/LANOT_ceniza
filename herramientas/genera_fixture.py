@@ -8,7 +8,7 @@ decodificados son idénticos a los del archivo original.
     python3 genera_fixture.py --l2 /data/ceniza/l2/2019/03/01 --instante 20190601332 \
         --bbox -100.262 20.580 -96.850 18.289 --salida tests/datos/l2
 
-bbox: lon_min lat_max lon_max lat_min, el mismo orden que CLIP_REGIONS en detect_ash.py.
+bbox: lon_min lat_max lon_max lat_min (CLIP_REGIONS en detect_ash.py usa puntos [lon, lat]).
 """
 import argparse
 import re
