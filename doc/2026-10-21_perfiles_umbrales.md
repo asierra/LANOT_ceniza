@@ -111,7 +111,7 @@ Se puede dejar para cuando se arme lo de Chile.
 
 ## Pendiente
 
-- ~~Reinstalar en tahan~~ (hecho el 2026-11-03). Falta revisar con `gdalinfo` que un GeoTIFF nuevo de la operación traiga las etiquetas `perfil` y `perfil_sha256`.
+- ~~Reinstalar en tahan~~ (hecho el 2026-11-03). Comprobado: `ceniza_20263071811_geo.tif` de la operación trae `perfil=popocatepetl` y el sha256 de `perfiles/popocatepetl.toml` (`1bda128a…`).
 - Paso 4 del plan (dominio del perfil, disco completo cada 10 min), cuando se arme el repo de Chile.
 - Probar `--perfil villarrica --clip perfil` con datos reales de disco completo: hasta ahora solo hay pruebas sintéticas para Chile.
 - Preguntar a Víctor qué valores cambian de un volcán a otro, y si basta un solo par de límites del SZA para una zona de 19° de latitud.
