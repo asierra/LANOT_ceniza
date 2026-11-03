@@ -1,7 +1,7 @@
 # Umbrales configurables por volcán (perfiles)
 
 - **Fecha:** 2026-10-21
-- **Estado:** perfiles y prueba hechos (2026-10-23). Del plan de 4 commits, el 1 (regiones y recorte) está hecho (2026-11-03); `classify_ash` todavía no lee los perfiles.
+- **Estado:** perfiles y prueba hechos (2026-10-23). Del plan de 4 commits, el 1 (regiones y recorte) y el 2 (`classify_ash` con perfil) están hechos (2026-11-03); la región y el dominio del perfil todavía no se usan.
 
 ## Por qué
 
@@ -72,6 +72,17 @@ Cuatro commits separados. Los tres primeros no cambian la operación del Popocat
 - Las pruebas de regresión deben dar los mismos píxeles. El clasificador de referencia de `test_perfiles.py` se retira: la prueba compara `classify_ash` con perfiles modificados.
 - El GeoTIFF guarda el nombre y el hash del perfil.
 - **Instalación:** el wheel solo incluye `detect_ash.py` y `compare_ash.py`, así que `instala.sh` no copiaría `perfiles/` a `/opt/lanot/ceniza`. Incluir la carpeta en el paquete (`pyproject.toml`) y buscar los perfiles relativos al módulo.
+
+**Hecho el 2026-11-03.**
+
+- `Perfil` (dataclass inmutable), `perfil_de_dict` (validación), `carga_perfil` y `perfil_por_omision` en `detect_ash.py`. `classify_ash(..., perfil=None)` usa el del Popocatépetl si no se le da otro; ya no recibe `kernel_size` y `FASES_NUBE` desapareció.
+- La tabla de fase se aplica como tabla (clase × fase). Fases fuera de 0 a 5 o sin dato dejan la clase igual; en el ACTP solo hay 0 a 5.
+- Los números del TOML pueden escribirse como enteros o con punto decimal (antes la prueba exigía punto decimal en las pruebas por bloque).
+- La `classify_ash` nueva y la anterior dieron los mismos píxeles en 120 escenas sintéticas (432 000 píxeles) y en las pruebas de regresión.
+- `tests/test_perfiles.py`: el clasificador de referencia se retiró. Ahora cambia, uno por uno, los 56 valores del perfil (32 números, 18 celdas de la tabla de fase y 6 fases de nube) y comprueba que la clasificación cambie; además, errores del TOML y `--perfil` en la línea de comandos.
+- El GeoTIFF guarda las etiquetas `perfil` y `perfil_sha256` (hash del archivo).
+- `--perfil` inválido sale con código 2 (uso). Un perfil con `estado = "ejemplo"` da un aviso.
+- El wheel incluye `perfiles/*.toml`: quedan en `site-packages/perfiles/`, junto a `detect_ash.py`. Se probó con una instalación limpia.
 
 ### 3. Polígonos y `--geo`
 

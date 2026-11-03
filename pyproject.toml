@@ -41,7 +41,7 @@ lanot-compare-ash = "compare_ash:main"
 
 [tool.hatch.build.targets.wheel]
 packages = []
-include = ["detect_ash.py", "compare_ash.py"]
+include = ["detect_ash.py", "compare_ash.py", "perfiles/*.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

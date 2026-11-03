@@ -2,8 +2,11 @@
 # -*- coding: utf-8 -*-
 
 import argparse
+import dataclasses
 import datetime
+import hashlib
 import logging
+import tomllib
 from pathlib import Path
 
 import numpy as np
@@ -79,9 +82,6 @@ CLASES = {
 }
 CLASES_EN_LEYENDA = [0, 1, 2, 3, 6]
 NUBE = 6
-# Fases ACTP que tapan la vista: 3 mixta, 4 hielo. La superenfriada (2) no entra por ahora
-# (por revisar con el autor principal; ver doc/2026-10-19_plan_mejoras_operacion.md).
-FASES_NUBE = (3, 4)
 ASH_COLORS = {v: rgb for v, (rgb, _, _) in CLASES.items()} | {SIN_DATOS: (0, 0, 0)}
 
 
@@ -172,6 +172,200 @@ def limites_goes(puntos, transformer, margen=0.0):
         x, y = np.concatenate([x, xm[ok]]), np.concatenate([y, ym[ok]])
     return x.min(), y.min(), x.max(), y.max()
  
+
+# --- Perfiles de umbrales (perfiles/*.toml; diseño en doc/2026-10-21_perfiles_umbrales.md) ---
+
+CARPETA_PERFILES = Path(__file__).resolve().parent / "perfiles"
+PERFIL_POR_OMISION = "popocatepetl"
+CLASES_PERFIL = {"sin_ceniza": 0, "ca": 1, "hap": 2, "lap": 3}
+# Fases del producto ACTP, en el orden de sus valores (0 a 5).
+FASES = ("despejado", "agua", "superenfriada", "mixta", "hielo", "desconocida")
+BLOQUES = ("noche", "crepusculo", "dia")
+
+
+@dataclasses.dataclass(frozen=True)
+class Prueba:
+    """Prueba de umbrales de una clase en un bloque de iluminación."""
+    dt1_max: float                    # ΔT1 < dt1_max
+    dt2_min: float                    # ΔT2 > dt2_min
+    dt3_min: float                    # ΔT3 > dt3_min
+    r137_min: float | None = None     # R1.37 > r137_min, si se da
+    bt13_max: float | None = None     # BT13 < bt13_max, si se da
+
+
+@dataclasses.dataclass(frozen=True)
+class Perfil:
+    """Umbrales de un volcán, leídos de un TOML con carga_perfil o perfil_de_dict."""
+    nombre: str
+    descripcion: str
+    estado: str                       # "operacion" o "ejemplo" (sin calibrar)
+    dia_max: float                    # día: SZA < dia_max
+    noche_min: float                  # noche: SZA > noche_min
+    kernel_tamano: int
+    kernel_umbral: float
+    kernel_ca_dt1_max: float
+    kernel_hap_dt1_max: float
+    pruebas: tuple                    # ((bloque, clase), Prueba) para noche/crepusculo/dia × ca/hap
+    hap_dt2_min: float
+    lap_dt2_min: float
+    dt3_ca_hap_max: float
+    dt3_lap_max: float
+    tabla_fase: tuple                 # tabla_fase[clase][fase] -> clase; clase 0 a 3, fase 0 a 5
+    fases_nube: tuple                 # fases (números) bajo las que "sin ceniza" pasa a NUBE
+    dominio: str                      # "C" (CONUS) o "F" (disco completo)
+    volcan: tuple                     # (lon, lat)
+    region: str | tuple               # nombre de CLIP_REGIONS o puntos ((lon, lat), ...)
+    sha256: str = ""                  # del archivo; vacío si no viene de un archivo
+
+    def prueba(self, bloque, clase):
+        return dict(self.pruebas)[(bloque, clase)]
+
+
+def _claves(d, obligatorias, opcionales=(), donde=""):
+    if not isinstance(d, dict):
+        raise ValueError(f"perfil, {donde}: se esperaba una tabla")
+    faltan = set(obligatorias) - set(d)
+    sobran = set(d) - set(obligatorias) - set(opcionales)
+    if faltan:
+        raise ValueError(f"perfil, {donde}: faltan {sorted(faltan)}")
+    if sobran:
+        raise ValueError(f"perfil, {donde}: claves desconocidas {sorted(sobran)}")
+
+
+def _numero(v, donde):
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        raise ValueError(f"perfil, {donde}: se esperaba un número, no {v!r}")
+    return float(v)
+
+
+def _dentro(lon, lat, puntos):
+    """Punto en rectángulo (2 puntos) o en polígono (3 o más; regla de par e impar)."""
+    v = vertices_region(puntos)
+    adentro = False
+    for (x0, y0), (x1, y1) in zip(v, np.roll(v, -1, axis=0)):
+        if (y0 > lat) != (y1 > lat) and lon < x0 + (lat - y0) * (x1 - x0) / (y1 - y0):
+            adentro = not adentro
+    return adentro
+
+
+def perfil_de_dict(p, sha256=""):
+    """Valida un perfil ya leído del TOML y lo convierte en Perfil. Error (ValueError) si
+    falta o sobra una clave, o si un valor no tiene sentido."""
+    _claves(p, ["perfil", "iluminacion", "kernel", *BLOQUES, "refinamiento_hap", "filtro_dt3",
+                "fase", "region"], donde="raíz")
+    meta = p["perfil"]
+    _claves(meta, ["nombre", "descripcion", "estado"], donde="perfil")
+    if meta["estado"] not in ("operacion", "ejemplo"):
+        raise ValueError("perfil, perfil.estado: 'operacion' o 'ejemplo'")
+
+    il = p["iluminacion"]
+    _claves(il, ["dia_max", "noche_min"], donde="iluminacion")
+    dia_max, noche_min = _numero(il["dia_max"], "dia_max"), _numero(il["noche_min"], "noche_min")
+    if not 0 < dia_max < noche_min < 180:
+        raise ValueError("perfil, iluminacion: debe cumplirse 0 < dia_max < noche_min < 180")
+
+    k = p["kernel"]
+    _claves(k, ["tamano", "umbral", "ca_dt1_max", "hap_dt1_max"], donde="kernel")
+    if isinstance(k["tamano"], bool) or not isinstance(k["tamano"], int) or k["tamano"] < 3 or k["tamano"] % 2 == 0:
+        raise ValueError("perfil, kernel.tamano: entero impar, 3 o más")
+
+    pruebas = []
+    for b in BLOQUES:
+        _claves(p[b], ["ca", "hap"], donde=b)
+        for c in ("ca", "hap"):
+            u = p[b][c]
+            _claves(u, ["dt1_max", "dt2_min", "dt3_min"], ["r137_min", "bt13_max"], donde=f"{b}.{c}")
+            pruebas.append(((b, c), Prueba(**{n: _numero(v, f"{b}.{c}.{n}") for n, v in u.items()})))
+
+    r = p["refinamiento_hap"]
+    _claves(r, ["hap_dt2_min", "lap_dt2_min"], donde="refinamiento_hap")
+    hap_dt2, lap_dt2 = _numero(r["hap_dt2_min"], "hap_dt2_min"), _numero(r["lap_dt2_min"], "lap_dt2_min")
+    if lap_dt2 > hap_dt2:
+        raise ValueError("perfil, refinamiento_hap: lap_dt2_min no puede ser mayor que hap_dt2_min")
+    f3 = p["filtro_dt3"]
+    _claves(f3, ["ca_hap_max", "lap_max"], donde="filtro_dt3")
+
+    f = p["fase"]
+    _claves(f, ["ca", "hap", "lap", "nube"], donde="fase")
+    tabla = [tuple([0] * len(FASES))]  # sin ceniza se queda sin ceniza
+    for c in ("ca", "hap", "lap"):
+        _claves(f[c], FASES, donde=f"fase.{c}")
+        malas = set(f[c].values()) - set(CLASES_PERFIL)
+        if malas:
+            raise ValueError(f"perfil, fase.{c}: {sorted(malas)} no es clase; solo {sorted(CLASES_PERFIL)}")
+        tabla.append(tuple(CLASES_PERFIL[f[c][fase]] for fase in FASES))
+    if not isinstance(f["nube"], list) or not set(f["nube"]) <= set(FASES):
+        raise ValueError(f"perfil, fase.nube: lista de fases de {list(FASES)}")
+
+    reg = p["region"]
+    _claves(reg, ["dominio", "volcan"], ["recorte", "puntos"], donde="region")
+    if reg["dominio"] not in ("C", "F"):
+        raise ValueError("perfil, region.dominio: 'C' (CONUS) o 'F' (disco completo)")
+    _claves(reg["volcan"], ["lat", "lon"], donde="region.volcan")
+    volcan = (_numero(reg["volcan"]["lon"], "volcan.lon"), _numero(reg["volcan"]["lat"], "volcan.lat"))
+    if ("recorte" in reg) == ("puntos" in reg):
+        raise ValueError("perfil, region: recorte o puntos, uno de los dos")
+    if "recorte" in reg:
+        if reg["recorte"] not in CLIP_REGIONS:
+            raise ValueError(f"perfil, region.recorte: {reg['recorte']!r} no es una de {list(CLIP_REGIONS)}")
+        region, puntos = reg["recorte"], CLIP_REGIONS[reg["recorte"]]
+    else:
+        puntos = reg["puntos"]
+        vertices_region(puntos)
+        if not all(-180 <= q[0] <= 180 and -90 <= q[1] <= 90 for q in puntos):
+            raise ValueError("perfil, region.puntos: cada punto es [lon, lat]")
+        region = tuple((float(q[0]), float(q[1])) for q in puntos)
+    if not _dentro(*volcan, puntos):
+        raise ValueError("perfil, region: el volcán queda fuera de la región")
+
+    return Perfil(
+        nombre=meta["nombre"], descripcion=meta["descripcion"], estado=meta["estado"],
+        dia_max=dia_max, noche_min=noche_min,
+        kernel_tamano=k["tamano"], kernel_umbral=_numero(k["umbral"], "kernel.umbral"),
+        kernel_ca_dt1_max=_numero(k["ca_dt1_max"], "kernel.ca_dt1_max"),
+        kernel_hap_dt1_max=_numero(k["hap_dt1_max"], "kernel.hap_dt1_max"),
+        pruebas=tuple(pruebas), hap_dt2_min=hap_dt2, lap_dt2_min=lap_dt2,
+        dt3_ca_hap_max=_numero(f3["ca_hap_max"], "filtro_dt3.ca_hap_max"),
+        dt3_lap_max=_numero(f3["lap_max"], "filtro_dt3.lap_max"),
+        tabla_fase=tuple(tabla), fases_nube=tuple(FASES.index(x) for x in f["nube"]),
+        dominio=reg["dominio"], volcan=volcan, region=region, sha256=sha256)
+
+
+def carga_perfil(nombre_o_ruta=PERFIL_POR_OMISION):
+    """
+    Lee y valida un perfil. Un nombre (sin '/' ni '.toml') se busca en la carpeta perfiles/
+    que viene con el programa; si no, es la ruta de un archivo TOML.
+    """
+    texto = str(nombre_o_ruta)
+    if "/" in texto or texto.endswith(".toml"):
+        ruta = Path(texto)
+    else:
+        ruta = CARPETA_PERFILES / f"{texto}.toml"
+        if not ruta.is_file():
+            hay = sorted(q.stem for q in CARPETA_PERFILES.glob("*.toml"))
+            raise ValueError(f"No hay perfil '{texto}'. Perfiles disponibles: {hay}")
+    datos = ruta.read_bytes()
+    try:
+        p = tomllib.loads(datos.decode("utf-8"))
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
+        raise ValueError(f"{ruta}: no es un TOML válido: {e}") from e
+    try:
+        return perfil_de_dict(p, sha256=hashlib.sha256(datos).hexdigest())
+    except ValueError as e:
+        raise ValueError(f"{ruta}: {e}") from e
+
+
+_perfil_por_omision = None
+
+
+def perfil_por_omision():
+    """El perfil del Popocatépetl, leído una sola vez."""
+    global _perfil_por_omision
+    if _perfil_por_omision is None:
+        _perfil_por_omision = carga_perfil(PERFIL_POR_OMISION)
+    return _perfil_por_omision
+
+
 def get_moment(is_conus=True):
     """
     Instante (YYYYjjjHHMM) del escaneo más reciente que ya empezó:
@@ -574,108 +768,95 @@ def genera_media_dst(arreglo, kernel_size=5):
     return media.astype(arreglo.dtype, copy=False), dst.astype(arreglo.dtype, copy=False)
 
 
-def classify_ash(c04, c07, c11, c13, c15, phase, sza, valid_data_mask, kernel_size=5) -> np.ndarray:
+def classify_ash(c04, c07, c11, c13, c15, phase, sza, valid_data_mask, perfil=None) -> np.ndarray:
     """Clasifica ceniza volcánica a partir de arrays de temperatura de brillo.
+
+    La estructura del algoritmo está aquí; los números vienen del perfil.
 
     Parámetros
     ----------
     c04, c07, c11, c13, c15 : np.ndarray
         Bandas GOES en temperatura de brillo (K) o reflectancia (c04).
     phase : np.ndarray
-        Fase de la nube (ACTP).
+        Fase de la nube (ACTP), valores 0 a 5 (ver FASES).
     sza : np.ndarray
         Ángulo cenital solar en grados.
     valid_data_mask : np.ndarray (bool)
         Máscara de píxeles con datos válidos.
-    kernel_size : int
-        Tamaño del kernel para el cálculo de textura.
+    perfil : Perfil
+        Umbrales; por omisión, los del Popocatépetl.
 
     Retorna
     -------
     np.ndarray (uint8)
         Array de clasificación con nodata=255 aplicado.
     """
+    p = perfil or perfil_por_omision()
+
     # Diferencias de brillo y temperatura (BTD)
     delta1 = c13 - c15
     delta2 = c11 - c13
     delta3 = c07 - c13
 
-    # Máscaras de iluminación
-    mask_noche = sza > 85
-    mask_dia = sza < 70
-    # 70° ≤ SZA ≤ 85°. Con límites estrictos (mayo de 2026) los valores exactos 70 y 85 se
-    # quedaban sin bloque.
-    mask_crepusculo = (sza >= 70) & (sza <= 85)
+    # Máscaras de iluminación. El crepúsculo incluye los dos límites: con límites estrictos
+    # (mayo de 2026) los valores exactos se quedaban sin bloque.
+    mask_noche = sza > p.noche_min
+    mask_dia = sza < p.dia_max
+    mask_crepusculo = (sza >= p.dia_max) & (sza <= p.noche_min)
 
-    # Cálculo de textura
-    media, dst = genera_media_dst(delta1, kernel_size=kernel_size)
+    # Textura: lo que marca el kernel entra como CA o HAP en los tres bloques.
+    media, dst = genera_media_dst(delta1, kernel_size=p.kernel_tamano)
+    textura = delta1 - (media * dst) < p.kernel_umbral
+    nhood = np.select([textura & (delta1 < p.kernel_ca_dt1_max),
+                       textura & (delta1 < p.kernel_hap_dt1_max)], [1, 2], default=0)
 
-    # Usando np.select para mayor claridad
-    cond_nhood = [
-        (delta1 < 0) & (delta1 - (media * dst) < -1),
-        (delta1 < 1) & (delta1 - (media * dst) < -1)
-    ]
-    val_nhood = [1, 2]
-    nhood = np.select(cond_nhood, val_nhood, default=0)
+    def cumple(u):
+        m = (delta1 < u.dt1_max) & (delta2 > u.dt2_min) & (delta3 > u.dt3_min)
+        if u.r137_min is not None:
+            m &= c04 > u.r137_min
+        if u.bt13_max is not None:
+            m &= c13 < u.bt13_max
+        return m
+
+    def bloque(b):
+        return np.select([cumple(p.prueba(b, "ca")) | (nhood == 1),
+                          cumple(p.prueba(b, "hap")) | (nhood == 2)], [1, 2], default=0)
 
     # Clasificación inicial por iluminación
-    # Noche
-    cond_noche = [
-        ((delta1 < 0) & (delta2 > 0) & (delta3 > 2)) | (nhood == 1),
-        ((delta1 < 1) & (delta2 > -0.5) & (delta3 > 2)) | (nhood == 2)
-    ]
-    ceniza_noche = np.select(cond_noche, [1, 2], default=0)
-
-    # Crepúsculo
-    cond_crepusculo = [
-        ((delta1 < 0) & (delta2 > 0) & (delta3 > 2)) | (nhood == 1),
-        ((delta1 < 1) & (delta2 > -0.5) & (delta3 > 2) & (c04 > 0.002) & (c13 < 273.15)) | (nhood == 2)
-    ]
-    ceniza_crepusculo = np.select(cond_crepusculo, [1, 2], default=0)
-
-    # Día
-    cond_dia = [
-        ((delta1 < 0) & (delta2 > 0) & (delta3 > 2) & (c04 > 0.002)) | (nhood == 1),
-        ((delta1 < 1) & (delta2 > -0.5) & (delta3 > 2) & (c04 > 0.002)) | (nhood == 2)
-    ]
-    ceniza_dia = np.select(cond_dia, [1, 2], default=0)
-
-    # Combinar según la máscara de iluminación
     ceniza_tiempo = np.select(
         [mask_noche, mask_crepusculo, mask_dia],
-        [ceniza_noche, ceniza_crepusculo, ceniza_dia],
+        [bloque("noche"), bloque("crepusculo"), bloque("dia")],
         default=0
     )
 
-    # Refinamiento de umbrales (usando np.select)
+    # Refinamiento de HAP por ΔT2: sigue HAP, pasa a LAP o se borra.
     cond_um1 = [
         ceniza_tiempo == 1,
-        (ceniza_tiempo == 2) & (delta2 >= -1),
-        (ceniza_tiempo == 2) & (delta2 >= -1.5),
-        (ceniza_tiempo == 2) & (delta2 < -1.5)
+        (ceniza_tiempo == 2) & (delta2 >= p.hap_dt2_min),
+        (ceniza_tiempo == 2) & (delta2 >= p.lap_dt2_min),
+        (ceniza_tiempo == 2) & (delta2 < p.lap_dt2_min)
     ]
-    val_um1 = [1, 2, 3, 0]
-    ceniza_um1 = np.select(cond_um1, val_um1, default=ceniza_tiempo)
+    ceniza_um1 = np.select(cond_um1, [1, 2, 3, 0], default=ceniza_tiempo)
 
+    # Filtro de ΔT3
     cond_um2 = [
-        (ceniza_um1 <= 2) & (delta3 <= 0),
-        (ceniza_um1 >= 3) & (delta3 <= 1.5)
+        (ceniza_um1 <= 2) & (delta3 <= p.dt3_ca_hap_max),
+        (ceniza_um1 >= 3) & (delta3 <= p.dt3_lap_max)
     ]
     ceniza_um2 = np.select(cond_um2, [0, 0], default=ceniza_um1)
 
-    # Clasificación final basada en fase de la nube
-    cond_final = [
-        (ceniza_um2 == 2) & (phase == 1), # Nube de agua
-        (ceniza_um2 == 2) & (phase == 4), # Hielo
-        (ceniza_um2 == 3) & (phase == 1), # Nube de agua
-        (ceniza_um2 == 3) & (phase >= 2)  # Superfría
-    ]
-    val_final = [3, 0, 0, 0]
-    ceniza = np.select(cond_final, val_final, default=ceniza_um2)
+    # Clase final según la fase de la nube (tabla del perfil). Fases fuera de 0 a 5 (o sin
+    # dato) dejan la clase como está.
+    fase = np.where(np.isfinite(phase), phase, -1).astype(np.int16)
+    fase_conocida = (fase >= 0) & (fase < len(FASES))
+    tabla = np.array(p.tabla_fase, dtype=np.uint8)
+    ceniza = np.where(fase_conocida, tabla[ceniza_um2, np.clip(fase, 0, len(FASES) - 1)],
+                      ceniza_um2).astype(np.uint8)
 
-    # Sin ceniza bajo nube de fase mixta o hielo: no se puede saber si hay ceniza.
-    ceniza = ceniza.astype(np.uint8)
-    ceniza[(ceniza == 0) & np.isin(phase, FASES_NUBE)] = NUBE
+    # Sin ceniza bajo las fases de nube del perfil (en el Popocatépetl, mixta o hielo): no se
+    # puede saber si hay ceniza. La superenfriada no entra por ahora (ver
+    # doc/2026-10-19_plan_mejoras_operacion.md).
+    ceniza[(ceniza == 0) & np.isin(phase, p.fases_nube)] = NUBE
 
     # Marcar píxeles sin datos válidos como 255 (nodata)
     ceniza[~valid_data_mask] = SIN_DATOS
@@ -684,8 +865,10 @@ def classify_ash(c04, c07, c11, c13, c15, phase, sza, valid_data_mask, kernel_si
 
 
 def process_instant(data_path, instant_info, output_path, clip_region=None, use_date_tree=False, eph=None, ts=None,
-                    escribe_qml=True):
-    """Procesa un instante: lee los datos GOES L2, clasifica ceniza y guarda el GeoTIFF."""
+                    escribe_qml=True, perfil=None):
+    """Procesa un instante: lee los datos GOES L2, clasifica ceniza y guarda el GeoTIFF.
+    Los umbrales salen de `perfil` (por omisión, los del Popocatépetl)."""
+    perfil = perfil or perfil_por_omision()
     logger.debug(f"Iniciando detección para el instante: {instant_info[0]}")
     
     # Validar y obtener los límites de la región de recorte si se especificó
@@ -879,7 +1062,7 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     sza = get_sun_zenith_angle(lat, lon, image_time_dt, eph, ts)
 
     # --- Clasificación de ceniza ---
-    ceniza = classify_ash(c04, c07, c11, c13, c15, phase, sza, valid_data_mask)
+    ceniza = classify_ash(c04, c07, c11, c13, c15, phase, sza, valid_data_mask, perfil=perfil)
 
     logger.debug("\n--- Clasificación final de ceniza ---")
     logger.debug(f"Forma del array final: {ceniza.shape}")
@@ -981,6 +1164,8 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     ) as dst:
         dst.write_colormap(1, color_table)
         dst.write(data_to_save, 1)
+        # Con qué umbrales se hizo: nombre del perfil y hash del archivo.
+        dst.update_tags(perfil=perfil.nombre, perfil_sha256=perfil.sha256)
 
     if escribe_qml:
         Path(output_path).with_suffix(".qml").write_text(estilo_qml())
@@ -999,6 +1184,10 @@ def main():
                              "Por defecto: './ceniza_[instante].tif'")
     parser.add_argument('-c', '--clip', type=str, choices=NOMBRES_CLIP, default=None, 
                         help=f"Región para recortar el resultado final. Agrega 'geo' al final para reproyectar a lat/lon. Opciones: {', '.join(CLIP_REGIONS.keys())} (o con sufijo 'geo')")
+    parser.add_argument('--perfil', type=str, default=PERFIL_POR_OMISION,
+                        help="Perfil de umbrales: un nombre de la carpeta perfiles/ "
+                             f"({', '.join(sorted(q.stem for q in CARPETA_PERFILES.glob('*.toml')))}) "
+                             f"o la ruta de un archivo .toml. Por defecto: {PERFIL_POR_OMISION}")
     parser.add_argument('--date-tree', action='store_true', 
                         help="Usa estructura de directorios YYYY/MM/DD dentro de --path para localizar los archivos según el instante especificado")
     parser.add_argument('--dry-run', action='store_true',
@@ -1016,6 +1205,15 @@ def main():
     # Configurar nivel de logging según --verbose
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=log_level, format='%(message)s', force=True)
+
+    try:
+        perfil = carga_perfil(args.perfil)
+    except (ValueError, OSError) as e:
+        logger.error(f"Error en el perfil: {e}")
+        sys.exit(SALIDA_USO)
+    if perfil.estado != "operacion":
+        logger.warning(f"El perfil '{perfil.nombre}' es un ejemplo sin calibrar ({perfil.descripcion}).")
+    logger.debug(f"Perfil: {perfil.nombre} (sha256 {perfil.sha256[:12]})")
 
     # --- 1. Determinar la lista de instantes a procesar ---
     if args.instant:
@@ -1132,6 +1330,7 @@ def main():
                 eph=eph_global,
                 ts=ts_global,
                 escribe_qml=not args.sin_qml,
+                perfil=perfil,
             )
             instantes_exitosos += 1
         except Exception:
