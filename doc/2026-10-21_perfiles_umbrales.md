@@ -1,7 +1,7 @@
 # Umbrales configurables por volcán (perfiles)
 
 - **Fecha:** 2026-10-21
-- **Estado:** perfiles y prueba hechos (2026-10-23). Del plan de 4 commits, el 1 (regiones y recorte) y el 2 (`classify_ash` con perfil) están hechos (2026-11-03); la región y el dominio del perfil todavía no se usan.
+- **Estado:** perfiles y prueba hechos (2026-10-23). Del plan de 4 commits, el 1 (regiones y recorte), el 2 (`classify_ash` con perfil) y el 3 (polígonos y `--geo`) están hechos (2026-11-03); falta el 4 (dominio del perfil).
 
 ## Por qué
 
@@ -90,6 +90,15 @@ Cuatro commits separados. Los tres primeros no cambian la operación del Popocat
 - Opción `--geo` para reproyectar a lat/lon una región dada con puntos, que no tiene nombre. El sufijo `geo` de `--clip` (`ashpapergeo`) sigue funcionando.
 - `--clip` manda sobre la región del perfil, así `procesa_ceniza.sh` no cambia.
 - Prueba con el cuadrilátero de `perfiles/villarrica.toml` sobre una escena sintética.
+
+**Hecho el 2026-11-03, con un cambio al plan.** "`--clip` manda sobre la región del perfil" suponía que `procesa_ceniza.sh` siempre pasa `--clip`, pero con `RECORTE=` vacío no lo pasa para generar el CONUS completo. Si la región del perfil se usara cuando falta `--clip`, ese modo empezaría a recortar a `ashpaper`. Se decidió:
+
+- Sin `--clip`, el dominio completo, como antes. La región del perfil se pide con `--clip perfil` (o `perfilgeo`). `procesa_ceniza.sh` no cambia.
+- `--geo` reproyecta cualquier región, igual que el sufijo `geo`; sin `--clip` es error de uso (código 2).
+- `resuelve_region` y `fuera_del_poligono` en `detect_ash.py`. `process_instant` acepta en `clip_region` un nombre o una lista de puntos, y `geo=`.
+- Con un polígono, en la proyección GOES el recorte es el rectángulo GOES del polígono (más chico que el de su rectángulo lat/lon); en lat/lon, la malla del rectángulo lat/lon. En los dos casos, lo que tiene el centro fuera del polígono queda en 255.
+- Pruebas (`tests/test_region.py`): el cuadrilátero de `perfiles/villarrica.toml` en mallas sintéticas GOES y lat/lon (puntos a cada lado de los bordes); un triángulo sobre los datos de prueba del Popocatépetl, que adentro da lo mismo que su rectángulo; `--clip perfil` igual a `--clip ashpaper` y `--geo` igual al sufijo. No se probó con datos reales de Chile (no hay disco completo en las pruebas).
+- Las salidas con las regiones con nombre siguen idénticas.
 
 ### 4. Dominio del perfil (disco completo, para Chile)
 

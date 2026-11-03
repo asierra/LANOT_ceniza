@@ -130,6 +130,9 @@ lanot-detect-ash --instant 20191001731 --clip popocatepetlgeo --output /data/res
   - `popocatepetl`: Región del Popocatépetl (proyección GOES nativa)
   - `popocatepetlgeo`: Región del Popocatépetl (reproyectado a lat/lon EPSG:4326)
   - `ashpaper`, `ashpapergeo`: Región del artículo (la que usa la operación en tahan)
+  - `perfil`, `perfilgeo`: La región del perfil elegido con `--perfil`. Si es un polígono (3 o más puntos), lo que queda fuera se marca sin datos (255)
+  - Sin `--clip` se procesa el dominio completo
+- `--geo`: Reproyecta a lat/lon la región de `--clip`; es lo mismo que el sufijo `geo`
 - `--perfil`: Umbrales a usar: un nombre de `perfiles/` (`popocatepetl`, `villarrica`) o la ruta de un archivo `.toml`. Por defecto, `popocatepetl`. El GeoTIFF guarda el nombre y el hash del perfil en sus metadatos (`gdalinfo` los muestra como `perfil` y `perfil_sha256`)
 - `--dry-run`: Solo revisa qué instantes tienen todos los archivos
 - `--sin-qml`: No escribe el estilo de QGIS junto al GeoTIFF
@@ -310,7 +313,7 @@ La tabla completa de reglas está en [el plan de octubre de 2026](doc/2026-10-19
 
 #### Perfiles de umbrales por volcán
 
-`perfiles/popocatepetl.toml` tiene todos los números de esta sección (umbrales por bloque y clase, kernel, límites del SZA, tabla de fase) y la región; `perfiles/villarrica.toml` es un ejemplo sin calibrar para el proyecto de Chile (el programa avisa al usarlo). `classify_ash` toma todos sus números del perfil que se elige con `--perfil` (por defecto, el del Popocatépetl); en el código solo queda la estructura del algoritmo. La lectura es estricta: una clave desconocida o faltante es un error. La región y el dominio del perfil todavía no se usan: el recorte sigue saliendo de `--clip`. El diseño y el plan están en [doc/2026-10-21_perfiles_umbrales.md](doc/2026-10-21_perfiles_umbrales.md).
+`perfiles/popocatepetl.toml` tiene todos los números de esta sección (umbrales por bloque y clase, kernel, límites del SZA, tabla de fase) y la región; `perfiles/villarrica.toml` es un ejemplo sin calibrar para el proyecto de Chile (el programa avisa al usarlo). `classify_ash` toma todos sus números del perfil que se elige con `--perfil` (por defecto, el del Popocatépetl); en el código solo queda la estructura del algoritmo. La lectura es estricta: una clave desconocida o faltante es un error. La región del perfil se usa con `--clip perfil` (o `perfilgeo`); sin `--clip` se procesa el dominio completo, como antes. El dominio del perfil (CONUS o disco completo) todavía no se usa. El diseño y el plan están en [doc/2026-10-21_perfiles_umbrales.md](doc/2026-10-21_perfiles_umbrales.md).
 
 ### Proyección y georreferenciación
 

@@ -15,6 +15,7 @@ import xarray as xr
 from affine import Affine
 from dateutil.parser import parse as parse_fecha
 from pyproj import CRS, Transformer
+from rasterio.features import geometry_mask
 from rasterio.warp import Resampling
 from scipy import ndimage
 from skyfield.api import Loader, utc
@@ -108,8 +109,10 @@ def estilo_qml():
 """
 
 
-# Nombres que acepta --clip: cada región, y la misma con 'geo' al final para reproyectar a lat/lon.
-NOMBRES_CLIP = [n + sufijo for n in CLIP_REGIONS for sufijo in ("", "geo")]
+# Nombres que acepta --clip: cada región y 'perfil' (la región del perfil), y cada uno con
+# 'geo' al final para reproyectar a lat/lon.
+REGION_DEL_PERFIL = "perfil"
+NOMBRES_CLIP = [n + sufijo for n in [*CLIP_REGIONS, REGION_DEL_PERFIL] for sufijo in ("", "geo")]
 
 
 def vertices_region(puntos):
@@ -150,6 +153,22 @@ def densifica(vertices, paso=0.05):
         t = np.arange(n)[:, None] / n
         tramos.append(p + t * (q - p))
     return np.concatenate(tramos)
+
+
+def fuera_del_poligono(puntos, forma, transform, crs=None):
+    """
+    Máscara (True = fuera) de los píxeles cuyo centro queda fuera de la región, en una malla
+    de `forma` (filas, columnas) con la transformación afín `transform`. Con `crs` None la
+    malla es lat/lon; si no, los bordes (rectos en lat/lon) se densifican y se transforman a
+    `crs`.
+    """
+    anillo = vertices_region(puntos)
+    if crs is not None:
+        x, y = Transformer.from_crs("EPSG:4326", crs, always_xy=True).transform(*densifica(anillo).T)
+        anillo = np.column_stack([x, y])
+    anillo = np.vstack([anillo, anillo[:1]])
+    return geometry_mask([{"type": "Polygon", "coordinates": [anillo.tolist()]}],
+                         out_shape=forma, transform=transform, all_touched=False)
 
 
 def limites_goes(puntos, transformer, margen=0.0):
@@ -864,33 +883,45 @@ def classify_ash(c04, c07, c11, c13, c15, phase, sza, valid_data_mask, perfil=No
     return ceniza
 
 
+def resuelve_region(clip_region, perfil, geo=False):
+    """
+    Puntos [lon, lat] de la región y si se reproyecta a lat/lon.
+
+    clip_region: None (sin recorte), un nombre de NOMBRES_CLIP ('geo' al final reproyecta;
+    'perfil' es la región del perfil) o una lista de puntos [lon, lat]. `geo` reproyecta
+    cualquier región.
+    """
+    if clip_region is None:
+        if geo:
+            raise ValueError("Para reproyectar a lat/lon (--geo) hace falta una región (--clip)")
+        return None, False
+    if not isinstance(clip_region, str):
+        return clip_region, geo
+    base, sufijo_geo = (clip_region[:-3], True) if clip_region.endswith("geo") else (clip_region, False)
+    if base == REGION_DEL_PERFIL:
+        base = perfil.region
+        if not isinstance(base, str):
+            return base, geo or sufijo_geo
+    if base not in CLIP_REGIONS:
+        raise ValueError(f"Región '{base}' no reconocida. Regiones disponibles: {list(CLIP_REGIONS.keys())}")
+    return CLIP_REGIONS[base], geo or sufijo_geo
+
+
 def process_instant(data_path, instant_info, output_path, clip_region=None, use_date_tree=False, eph=None, ts=None,
-                    escribe_qml=True, perfil=None):
+                    escribe_qml=True, perfil=None, geo=False):
     """Procesa un instante: lee los datos GOES L2, clasifica ceniza y guarda el GeoTIFF.
-    Los umbrales salen de `perfil` (por omisión, los del Popocatépetl)."""
+
+    Los umbrales salen de `perfil` (por omisión, los del Popocatépetl). La región, de
+    `clip_region` y `geo` (ver resuelve_region). Con 3 o más puntos, lo que queda fuera del
+    polígono se marca sin datos (255) después de clasificar, para que el kernel cerca del
+    borde vea a sus vecinos."""
     perfil = perfil or perfil_por_omision()
     logger.debug(f"Iniciando detección para el instante: {instant_info[0]}")
-    
-    # Validar y obtener los límites de la región de recorte si se especificó
-    reproject_to_geo = False
-    if clip_region:
-        # Verificar si el nombre termina en "geo" para reproyectar
-        if clip_region.endswith("geo"):
-            reproject_to_geo = True
-            base_region = clip_region[:-3]  # Remover "geo" del final
-        else:
-            base_region = clip_region
-        
-        if base_region not in CLIP_REGIONS:
-            raise ValueError(f"Región '{base_region}' no reconocida. Regiones disponibles: {list(CLIP_REGIONS.keys())}")
-        
-        puntos = CLIP_REGIONS[base_region]
-        if reproject_to_geo:
-            logger.debug(f"Se aplicará recorte a región '{base_region}' y reproyección a lat/lon: {puntos}")
-        else:
-            logger.debug(f"Se aplicará recorte a región '{base_region}': {puntos}")
-    else:
-        puntos = None
+
+    puntos, reproject_to_geo = resuelve_region(clip_region, perfil, geo)
+    if puntos is not None:
+        logger.debug(f"Región de recorte {clip_region!r}: {puntos}"
+                     + (" (se reproyecta a lat/lon)" if reproject_to_geo else ""))
 
     carpeta = carpeta_del_instante(data_path, instant_info, use_date_tree)
     file_paths, faltan = busca_archivos(carpeta, instant_info[0])
@@ -922,7 +953,7 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     y_coords_full = ds_c07['y'].values.astype(np.float64) * goes_height
     
     # --- Determinar índices de recorte si se especificó una región ---
-    if puntos:
+    if puntos is not None:
         logger.debug(f"\nCalculando índices de recorte para región: {puntos}")
         transformer_to_goes = Transformer.from_crs("EPSG:4326", crs_goes, always_xy=True)
         # Si se va a reproyectar a lat/lon, se recorta con un margen de 10 % por lado para
@@ -1087,7 +1118,7 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     output_da.rio.write_nodata(255, inplace=True)
 
     # Reproyectar a coordenadas geográficas si se especificó
-    if puntos and reproject_to_geo:
+    if puntos is not None and reproject_to_geo:
         logger.debug("\nReproyectando a coordenadas geográficas (EPSG:4326)...")
         
         # Límites EXACTOS en lat/lon: el rectángulo que contiene a la región, sin margen
@@ -1139,6 +1170,11 @@ def process_instant(data_path, instant_info, output_path, clip_region=None, use_
     # Usar los datos del output_da (que pueden estar reproyectados).
     # 0 = sin ceniza, 1-3 = clases, 255 = sin datos (NoData).
     data_to_save = output_da.values.astype(np.uint8)
+    if puntos is not None and len(puntos) >= 3:
+        fuera = fuera_del_poligono(puntos, data_to_save.shape, output_da.rio.transform(),
+                                   crs=None if reproject_to_geo else crs_goes)
+        data_to_save[fuera] = SIN_DATOS
+        logger.debug(f"Fuera del polígono: {int(fuera.sum())} de {fuera.size} píxeles")
     color_table = dict(ASH_COLORS)
 
     height, width = data_to_save.shape
@@ -1183,7 +1219,11 @@ def main():
                              "Si es un directorio, se genera automáticamente el nombre 'ceniza_[instante].tif' (o con sufijo '_geo' si se reproyecta). "
                              "Por defecto: './ceniza_[instante].tif'")
     parser.add_argument('-c', '--clip', type=str, choices=NOMBRES_CLIP, default=None, 
-                        help=f"Región para recortar el resultado final. Agrega 'geo' al final para reproyectar a lat/lon. Opciones: {', '.join(CLIP_REGIONS.keys())} (o con sufijo 'geo')")
+                        help=f"Región para recortar el resultado final. Agrega 'geo' al final para reproyectar a lat/lon. "
+                             f"Opciones: {', '.join(CLIP_REGIONS.keys())} o '{REGION_DEL_PERFIL}' (la región de --perfil), "
+                             "con o sin sufijo 'geo'. Sin --clip se procesa el dominio completo.")
+    parser.add_argument('--geo', action='store_true',
+                        help="Reproyecta a lat/lon (EPSG:4326) la región de --clip; igual que el sufijo 'geo'.")
     parser.add_argument('--perfil', type=str, default=PERFIL_POR_OMISION,
                         help="Perfil de umbrales: un nombre de la carpeta perfiles/ "
                              f"({', '.join(sorted(q.stem for q in CARPETA_PERFILES.glob('*.toml')))}) "
@@ -1210,6 +1250,11 @@ def main():
         perfil = carga_perfil(args.perfil)
     except (ValueError, OSError) as e:
         logger.error(f"Error en el perfil: {e}")
+        sys.exit(SALIDA_USO)
+    try:
+        _, reproyecta = resuelve_region(args.clip, perfil, args.geo)
+    except ValueError as e:
+        logger.error(f"Error: {e}")
         sys.exit(SALIDA_USO)
     if perfil.estado != "operacion":
         logger.warning(f"El perfil '{perfil.nombre}' es un ejemplo sin calibrar ({perfil.descripcion}).")
@@ -1304,7 +1349,7 @@ def main():
                 except Exception as e:
                     logger.error(f"No se pudo crear el directorio de salida '{output_dir}': {e}")
                     raise
-                if args.clip and args.clip.endswith('geo'):
+                if reproyecta:
                     filename = f"ceniza_{instant_str}_geo.tif"
                 else:
                     filename = f"ceniza_{instant_str}.tif"
@@ -1315,7 +1360,7 @@ def main():
                     break
                 output_file = output_path
         else:
-            if args.clip and args.clip.endswith('geo'):
+            if reproyecta:
                 output_file = Path(f"./ceniza_{instant_str}_geo.tif")
             else:
                 output_file = Path(f"./ceniza_{instant_str}.tif")
@@ -1331,6 +1376,7 @@ def main():
                 ts=ts_global,
                 escribe_qml=not args.sin_qml,
                 perfil=perfil,
+                geo=args.geo,
             )
             instantes_exitosos += 1
         except Exception:

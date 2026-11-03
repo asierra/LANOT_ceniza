@@ -1,6 +1,13 @@
-"""Regiones como puntos [lon, lat] y su rectángulo en la proyección GOES."""
+"""Regiones como puntos [lon, lat]: su rectángulo en la proyección GOES y la máscara de
+los polígonos."""
+import subprocess
+import sys
+from pathlib import Path
+
 import numpy as np
 import pytest
+import rasterio
+from affine import Affine
 from pyproj import CRS, Transformer
 
 import detect_ash as d
@@ -78,3 +85,119 @@ def test_margen_agranda():
 def test_fuera_del_disco():
     with pytest.raises(ValueError, match="disco visible"):
         d.limites_goes([[100.0, 10.0], [110.0, 20.0]], A_GOES)
+
+
+# --- Polígonos: lo de afuera queda en 255 ----------------------------------------------
+
+RAIZ = Path(__file__).resolve().parents[1]
+L2 = RAIZ / "tests" / "datos" / "l2"
+VILLARRICA = d.carga_perfil("villarrica")
+DENTRO = [(-71.93, -39.42), (-83.0, -45.0), (-50.0, -30.0)]   # el volcán y dos cerca de esquinas
+FUERA = [(-83.0, -30.0), (-45.5, -40.0), (-60.0, -46.9)]      # junto a los bordes oeste, este y sur, por fuera
+
+
+def test_poligono_en_malla_goes():
+    x0, y0, x1, y1 = d.limites_goes(VILLARRICA.region, A_GOES)
+    res = 2004.0
+    t = Affine(res, 0, x0, 0, -res, y1)
+    forma = (int(np.ceil((y1 - y0) / res)), int(np.ceil((x1 - x0) / res)))
+    fuera = d.fuera_del_poligono(VILLARRICA.region, forma, t, crs=GOES16)
+    for lonlat, esperado in [(q, False) for q in DENTRO] + [(q, True) for q in FUERA]:
+        col, fila = ~t @ A_GOES.transform(*lonlat)
+        assert 0 <= fila < forma[0] and 0 <= col < forma[1], lonlat
+        assert fuera[int(fila), int(col)] == esperado, lonlat
+    assert 0.1 < fuera.mean() < 0.5
+
+
+def test_poligono_en_malla_latlon():
+    lon0, lat0, lon1, lat1 = d.limites_region(VILLARRICA.region)
+    t = Affine(0.02, 0, lon0, 0, -0.02, lat1)
+    forma = (int(np.ceil((lat1 - lat0) / 0.02)), int(np.ceil((lon1 - lon0) / 0.02)))
+    fuera = d.fuera_del_poligono(VILLARRICA.region, forma, t)
+    for lonlat, esperado in [(q, False) for q in DENTRO] + [(q, True) for q in FUERA]:
+        col, fila = ~t @ lonlat
+        assert 0 <= fila < forma[0] and 0 <= col < forma[1], lonlat
+        assert fuera[int(fila), int(col)] == esperado, lonlat
+
+
+def test_resuelve_region():
+    popo = d.carga_perfil("popocatepetl")
+    assert d.resuelve_region(None, popo) == (None, False)
+    assert d.resuelve_region("ashpapergeo", popo) == (d.CLIP_REGIONS["ashpaper"], True)
+    assert d.resuelve_region("ashpaper", popo, geo=True) == (d.CLIP_REGIONS["ashpaper"], True)
+    assert d.resuelve_region("perfil", popo) == (d.CLIP_REGIONS["ashpaper"], False)
+    assert d.resuelve_region("perfilgeo", VILLARRICA) == (VILLARRICA.region, True)
+    with pytest.raises(ValueError, match="--geo"):
+        d.resuelve_region(None, popo, geo=True)
+    with pytest.raises(ValueError, match="no reconocida"):
+        d.resuelve_region("chile", popo)
+
+
+TRIANGULO = [[-100.1, 18.4], [-97.0, 18.4], [-98.5, 20.4]]
+
+
+@pytest.fixture(scope="module")
+def efemerides():
+    return d.carga_efemerides()
+
+
+@pytest.mark.parametrize("geo", [False, True])
+def test_triangulo_en_datos_reales(tmp_path, efemerides, geo):
+    eph, ts = efemerides
+    instante = d.normalize_moment("20190601332")
+    lon0, lat0, lon1, lat1 = d.limites_region(TRIANGULO)
+    salidas = {}
+    for nombre, region in [("triangulo", TRIANGULO), ("rectangulo", [[lon0, lat0], [lon1, lat1]])]:
+        ruta = tmp_path / f"{nombre}.tif"
+        d.process_instant(L2, instante, ruta, clip_region=region, geo=geo, eph=eph, ts=ts, escribe_qml=False)
+        with rasterio.open(ruta) as f:
+            salidas[nombre] = (f.read(1), f.transform, f.crs)
+    (tri, t_tri, crs), (rect, t_rect, _) = salidas["triangulo"], salidas["rectangulo"]
+    fuera = tri == d.SIN_DATOS
+    assert 0.2 < fuera.mean() < 0.8
+    if geo:
+        # misma malla lat/lon (el rectángulo que contiene a la región)
+        assert tri.shape == rect.shape and t_tri == t_rect
+        mismo = rect
+    else:
+        # En GOES el triángulo se recorta con su propio rectángulo, más chico: se compara la
+        # parte común, sin las 2 filas y columnas de la orilla, donde el kernel de 5 ve
+        # vecinos distintos.
+        dc, df = (round(v) for v in ~t_rect @ (t_tri.c, t_tri.f))
+        mismo = rect[df:df + tri.shape[0], dc:dc + tri.shape[1]]
+        assert mismo.shape == tri.shape
+        fuera[:2] = fuera[-2:] = True
+        fuera[:, :2] = fuera[:, -2:] = True
+    np.testing.assert_array_equal(tri[~fuera], mismo[~fuera])
+    assert (mismo[tri == d.SIN_DATOS] != d.SIN_DATOS).any()
+    # adentro: la punta norte y el centro; afuera: a los lados, a media altura
+    if geo:
+        punto = lambda lon, lat: tuple(int(v) for v in (~t_tri @ (lon, lat))[::-1])
+    else:
+        a = Transformer.from_crs("EPSG:4326", d.CRS.from_wkt(crs.to_wkt()), always_xy=True)
+        punto = lambda lon, lat: tuple(int(v) for v in (~t_tri @ a.transform(lon, lat))[::-1])
+    assert tri[punto(-98.5, 20.2)] != d.SIN_DATOS and tri[punto(-98.5, 19.5)] != d.SIN_DATOS
+    assert tri[punto(-99.9, 19.5)] == d.SIN_DATOS and tri[punto(-97.2, 19.5)] == d.SIN_DATOS
+
+
+def corre(*args, cwd):
+    return subprocess.run([sys.executable, str(RAIZ / "detect_ash.py"), *args],
+                          cwd=cwd, capture_output=True, text=True, timeout=120)
+
+
+def test_cli_clip_perfil_y_geo(tmp_path):
+    base = ["--path", str(L2), "-m", "20190601332", "--sin-qml"]
+    for carpeta, extra in [("perfil", ["--clip", "perfil"]), ("nombre", ["--clip", "ashpaper"]),
+                           ("geo", ["--clip", "popocatepetl", "--geo"]), ("sufijo", ["--clip", "popocatepetlgeo"])]:
+        (tmp_path / carpeta).mkdir()
+        r = corre(*base, *extra, "-o", f"{tmp_path / carpeta}/", cwd=tmp_path)
+        assert r.returncode == 0, r.stdout + r.stderr
+    lee = lambda ruta: rasterio.open(ruta).read(1)
+    np.testing.assert_array_equal(lee(tmp_path / "perfil/ceniza_20190601332.tif"),
+                                  lee(tmp_path / "nombre/ceniza_20190601332.tif"))
+    np.testing.assert_array_equal(lee(tmp_path / "geo/ceniza_20190601332_geo.tif"),
+                                  lee(tmp_path / "sufijo/ceniza_20190601332_geo.tif"))
+
+
+def test_cli_geo_sin_clip(tmp_path):
+    assert corre("--path", str(L2), "-m", "20190601332", "--geo", cwd=tmp_path).returncode == 2
