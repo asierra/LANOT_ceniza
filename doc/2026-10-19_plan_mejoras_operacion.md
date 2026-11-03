@@ -1,7 +1,7 @@
 # Plan de mejoras para la operación de `detect_ash.py`
 
 - **Fecha:** 2026-10-19
-- **Estado:** aprobado el 2026-10-19. Fases 0, 1 y 2 implementadas el 2026-10-19 y 20 (ver "Seguimiento" al final). Fase 3 (P10, P11) pendiente de decisión con el autor principal.
+- **Estado:** aprobado el 2026-10-19. Fases 0, 1 y 2 implementadas el 2026-10-19 y 20 (ver "Seguimiento" al final). Fase 3 (P10, P11) decidida en la reunión del 2026-10-23: se quedan como están en el código, igual que la nube superenfriada (ver [la reunión](2026-10-23_reunion_victor.md)).
 - **Rama:** `operacion-tahan`
 
 ## Contexto

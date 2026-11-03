@@ -30,11 +30,13 @@ cd ~/src/LANOT_ceniza && git pull && operacion/instala.sh
 
 `/opt/lanot/ceniza/VERSION` dice de qué commit se instaló.
 
+Los perfiles de umbrales (`perfiles/*.toml`) se instalan con el paquete. El programa lee `popocatepetl.toml` aunque no se le dé `--perfil`, así que una instalación anterior a noviembre de 2026 hay que actualizarla antes de usar el código nuevo.
+
 ### Requisitos en el servidor
 
 | requisito | dónde | variable para cambiarlo |
 |---|---|---|
-| Python ≥ 3.10 del sistema | `/usr/bin/python3` | `PYTHON_SISTEMA` (en `instala.sh`) |
+| Python ≥ 3.11 del sistema (tahan tiene la 3.12) | `/usr/bin/python3` | `PYTHON_SISTEMA` (en `instala.sh`) |
 | CSPP Geo AIT 2.3.1 | `~lanotadm/csppgeo/cspp-geo-aitf-2.3` | `AITF_DIR` |
 | L1b CONUS | `/data1/input/abi/l1b/conus` | `L1B_DIR` |
 | Caché dinámico de CSPP | `/data1/aitf_2_3_cache` | `CSPP_GEO_AITF_CACHE` |

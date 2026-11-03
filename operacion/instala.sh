@@ -22,7 +22,7 @@ PYTHON_SISTEMA=${PYTHON_SISTEMA:-/usr/bin/python3}
     echo "  sudo mkdir -p $DESTINO && sudo chown lanotadm:ash $DESTINO && sudo chmod 2775 $DESTINO" >&2
     exit 1
 }
-"$PYTHON_SISTEMA" -c 'import sys; assert sys.version_info >= (3, 10), "se requiere Python >= 3.10"'
+"$PYTHON_SISTEMA" -c 'import sys; assert sys.version_info >= (3, 11), "se requiere Python >= 3.11"'
 
 # Los archivos instalados deben poder leerlos lanotadm y el grupo ash.
 umask 0002

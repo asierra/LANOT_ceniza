@@ -111,4 +111,7 @@ Se puede dejar para cuando se arme lo de Chile.
 
 ## Pendiente
 
+- **Reinstalar en tahan** con `operacion/instala.sh`. El programa ahora lee `perfiles/popocatepetl.toml` aunque no se le dé `--perfil`; la versión instalada no lo tiene, así que hay que reinstalar antes de que la operación use el código nuevo. Después, revisar con `gdalinfo` que el GeoTIFF traiga las etiquetas `perfil` y `perfil_sha256`.
+- Paso 4 del plan (dominio del perfil, disco completo cada 10 min), cuando se arme el repo de Chile.
+- Probar `--perfil villarrica --clip perfil` con datos reales de disco completo: hasta ahora solo hay pruebas sintéticas para Chile.
 - Preguntar a Víctor qué valores cambian de un volcán a otro, y si basta un solo par de límites del SZA para una zona de 19° de latitud.
