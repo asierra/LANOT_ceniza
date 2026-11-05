@@ -193,6 +193,41 @@ Para cada día, `reglas_terascan.py --r04 0.003 --nube acm3` en tahan (`~/compar
 - **Lejos del volcán, TeraScan tiene muchas más falsas alarmas.** Las mismas reglas sobre nuestros datos dan casi siempre bastante menos (de 2 a 270 veces menos según el día), así que vienen sobre todo de las entradas de TeraScan (L1b y máscara de nubes). Contando su clase 4 serían de 76 000 a 357 000 píxeles al día en 12 de los 16 días. La nuestra también tiene falsas alarmas lejos (hasta 7 000 píxeles al día); falta ver qué son.
 - La conclusión del día de prueba ("las entradas casi no pesan") vale para ese día, no en general: en septiembre, cerca del volcán, TeraScan ve ceniza en 126 a 213 escaneos por día y sus reglas sobre nuestros datos en 2 a 38.
 
+## Velocidad (2026-11-05)
+
+**TeraScan.** Datos de los registros de cada paso (`/opt/terascan/pass/logfiles/pprocs/`) para los 251 escaneos del 2026-11-04 que llegaron a GeoTIFF (de 288). Segundos desde el inicio del escaneo, mediana:
+
+| paso | empieza | termina | dura |
+|---|---|---|---|
+| ingesta de las L1b (C04 a C15) | 183 | 194 | 11.5 |
+| máscara de nubes de TeraScan | 203 | 217 | 14.7 |
+| ceniza (`ash_new_m8_altura`, **CONUS completo**) | 215 | 225 | 9.8 |
+| recorte a `centromex` | 227 | 232 | 4.3 |
+| exportación a GeoTIFF | 234 | **236** | 2.0 |
+
+**Nuestra operación** (`latencia_ceniza.csv`, los 288 escaneos del mismo día, todos `ok`):
+
+| paso | dura (mediana) |
+|---|---|
+| llegada a cirrus | 184 s después del inicio del escaneo |
+| CSPP (`cmi,acm,actp`, CONUS completo, 4 segmentos) | 64.6 |
+| ceniza (`--clip ashpapergeo`) | 1.0 |
+| **total** | **259** |
+
+**Solo el paso de ceniza**, medido en tahan con un escaneo (`/usr/bin/time`, 3 corridas):
+
+| | tiempo | memoria |
+|---|---|---|
+| `--clip ashpapergeo` (operación) | 1.1 s | 400 MB |
+| `--clip centromexgeo` (región de TeraScan) | 1.1 s | 400 MB |
+| CONUS completo, sin recorte | 2.1 s | 830 MB |
+
+- **De punta a punta, TeraScan es unos 23 s más rápido:** 236 s contra 259 s. Los datos llegan a las dos máquinas a la misma hora (~184 s).
+- **La diferencia está antes del algoritmo.** TeraScan ingiere las L1b y hace su máscara de nubes en ~33 s; CSPP tarda ~65 s, porque calcula ACM y la fase de nube (ACTP), que es más elaborada.
+- **Nuestro paso de ceniza es más rápido que el de TeraScan.** Recortado tarda 1 s, y en CONUS completo 2 s. TeraScan tarda unos 16 s entre clasificación, recorte y exportación. TeraScan clasifica todo el CONUS y luego recorta; la nuestra recorta antes de clasificar.
+- **Escaneos completos ese día:** TeraScan generó GeoTIFF en 251 de 288 escaneos (87 %); la nuestra, en los 288.
+- `operacion/README.md` dice que el CONUS completo tarda ~9 s más que el recorte. Hoy medí 1 s más (2.1 contra 1.1 s); falta ver si esa nota es de antes de las mejoras de octubre.
+
 ## Pendiente
 
 1. ~~Comprobar que la diferencia del LAP viene de la máscara de nubes~~ (hecho el 2026-11-05: la máscara explica la diferencia con las reglas de TeraScan en Python; la diferencia con `classify_ash` es la regla de fase).
