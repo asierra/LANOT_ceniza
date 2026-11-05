@@ -228,6 +228,39 @@ Para cada día, `reglas_terascan.py --r04 0.003 --nube acm3` en tahan (`~/compar
 - **Escaneos completos ese día:** TeraScan generó GeoTIFF en 251 de 288 escaneos (87 %); la nuestra, en los 288.
 - `operacion/README.md` dice que el CONUS completo tarda ~9 s más que el recorte. Hoy medí 1 s más (2.1 contra 1.1 s); falta ver si esa nota es de antes de las mejoras de octubre.
 
+### Acortar CSPP (2026-11-05)
+
+TeraScan no usa ACTP: su script recibe la máscara de nubes de TeraScan, que solo sirve para pasar HAP bajo nube a 4 y LAP bajo nube a 0. La nuestra necesita ACM y ACTP, y por eso CSPP. CSPP no puede procesar solo una región, pero sí repartir el trabajo.
+
+**Dónde se va el tiempo** (escaneo 2026-309 21:41 UTC, etapas corridas a mano, configuración actual de 4 segmentos):
+
+| etapa | tiempo |
+|---|---|
+| CMIP (16 bandas, de una en una) | 7.8 s |
+| preprocesamiento | 6.8 s |
+| algoritmos: ACM y ACTP, 4 segmentos en paralelo | 35.8 s |
+| posprocesamiento | 12.6 s |
+| resto | ~1 s |
+
+**Pruebas:**
+- Correr solo los segmentos que cubren México no funciona: el posprocesamiento necesita los metadatos de todos los segmentos (`Cannot resolve XPath 'TOTAL_PIX'`).
+- Con **48 segmentos** (`--max-segment-rows 125 --max-segment-cols 625 -j 48`), los algoritmos tardan 17.1 s en vez de 35.8 s.
+- Con **CMIP en paralelo** (`--cmip-args "--cmi --environment CG -P 16"`), CMIP tarda 3.0 s en vez de 7.8 s. Los 16 CMI salen idénticos.
+
+**CSPP completo** (dos corridas de cada configuración, cada una con caché temporal vacío):
+
+| configuración | tiempo |
+|---|---|
+| actual: `--max-segment-rows 375` | 65.3 y 65.7 s |
+| nueva: 48 segmentos, `-j 48`, CMIP con `-P 16` | 42.7 y 44.5 s |
+
+**Resultado idéntico:**
+- ACM, BCM y los CMI que usamos (C04, C07, C11, C13, C15) no cambian ni un píxel.
+- La fase (ACTP) cambia en 4 píxeles de todo el CONUS, ninguno en la región de la operación.
+- El GeoTIFF de ceniza `ashpapergeo` es idéntico. En el CONUS completo cambian 4 de 3 750 000 píxeles.
+
+Con la configuración nueva, la latencia de la operación bajaría de ~259 a ~237 s, casi la de TeraScan (236 s). El costo es que cada 5 minutos se usan hasta 48 núcleos de tahan durante ~17 s. No se ha aplicado a la operación. Las corridas de prueba están en `tahan:~/prueba_cspp/`.
+
 ## Pendiente
 
 1. ~~Comprobar que la diferencia del LAP viene de la máscara de nubes~~ (hecho el 2026-11-05: la máscara explica la diferencia con las reglas de TeraScan en Python; la diferencia con `classify_ash` es la regla de fase).
@@ -241,7 +274,8 @@ Para cada día, `reglas_terascan.py --r04 0.003 --nube acm3` en tahan (`~/compar
    - los días sin avisos;
    - los eventos bajo nubes.
 6. Si hace falta un evento fuera de las fechas con ACTP, generarlo con CSPP desde las L1b (bajando GFS y OISST).
-7. Preguntar a Víctor:
+7. Decidir si la operación usa la configuración nueva de CSPP (ver "Acortar CSPP").
+8. Preguntar a Víctor:
    - si R04 en porcentaje es lo que se pretendía;
    - si en la evaluación la nube (6) cuenta como "no se sabe" o como "sin ceniza";
    - por qué el LAP dejó de ser una prueba propia (ΔT1 < 3 en TeraScan) y pasó a salir del HAP;
