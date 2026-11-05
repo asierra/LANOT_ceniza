@@ -1,7 +1,7 @@
 # Comparación con la versión de TeraScan
 
 - **Fecha:** 2026-11-05
-- **Estado:** día de prueba (2026-11-02) hecho y explicado; falta elegir la muestra y evaluar contra CENAPRED.
+- **Estado:** día de prueba (2026-11-02) hecho y explicado; muestra de 16 días elegida con los avisos del VAAC y en proceso (2026-11-05); falta evaluar y confirmar con CENAPRED.
 
 ## Por qué
 
@@ -125,16 +125,56 @@ Ceniza = clases 1 a 4. "±1 px": cuenta como coincidencia si hay ceniza del otro
 
 Archivos: GeoTIFF de TeraScan en `/data/ceniza/terascan/centromex/`; salidas nuestras en `/data/ceniza/terascan/piloto_20261102/`; corridas en `tahan:~/comparacion_terascan/`.
 
+## Muestra (2026-11-05)
+
+### Datos disponibles
+
+- **L2 con ACTP en tahan:** 133 días de 2026 con al menos 200 escaneos: del 1 al 9, del 14 al 19 y del 23 al 29 de enero, del 1 de febrero al 10 de marzo, del 17 al 24 de marzo, y del 1 de septiembre al 4 de noviembre. Los demás días tienen CMIP pero no ACTP. La cadena de ceniza (`procesa_ceniza.sh`) genera ACTP, pero lo borra a la hora.
+- **L1b CONUS en tahan:** 262 días completos de 2026 (`/depot/goes-east/l1b/abi/conus/2026/`). Con ellos se podría generar ACTP con CSPP (~66 s por escaneo). Para fechas anteriores a octubre de 2026 habría que bajar GFS y OISST de los archivos de NOAA: el caché de tahan solo tiene octubre y noviembre.
+- Con L2 y TeraScan (≥ 200 escaneos de cada uno) quedan 114 días.
+
+### Avisos del VAAC de Washington
+
+`herramientas/avisos_vaac.py` bajó los 947 avisos del Popocatépetl de 2025 y 2026 a `/data/ceniza/vaac/` y los resume en `avisos_popocatepetl.csv`. Cada aviso trae:
+- hora de observación en UTC;
+- si el satélite vio la ceniza (`OBS VA CLD` con área), si solo se estimó (`EST VA CLD`: la vio una cámara pero el satélite no, casi siempre por nubes) o si no se identificó;
+- fuentes: GOES, cámara, modelos, VOLCAT.
+
+Los analistas usan las mismas imágenes de GOES, así que no es una referencia independiente del todo.
+
+`/data/ceniza/vaac/dias_2026.csv` resume cada día de 2026: escaneos con L2 y de TeraScan, número de avisos, horas de ceniza observada y estimada. Con L2 y TeraScan hay:
+- 46 días con ceniza vista por el satélite;
+- 2 con ceniza solo estimada;
+- 37 sin avisos ese día ni el anterior ni el siguiente.
+
+Los días con ceniza estimada casi todos son de mayo a agosto (temporada de lluvias), cuando no hay ACTP.
+
+**El 2026-11-02 no tiene avisos** (ni el 1 ni el 3), y aun así TeraScan y la nuestra ven ceniza junto al volcán en unos 150 escaneos. Hay dos explicaciones posibles: el VAAC no avisa de emisiones pequeñas, o las dos versiones tienen falsas alarmas fijas en el cráter. Por eso "sin avisos" no quiere decir "sin ceniza". Para los días sin ceniza hace falta CENAPRED.
+
+### Días elegidos
+
+16 días; la lista está en `/data/ceniza/terascan/muestra/dias.txt`.
+
+| grupo | días |
+|---|---|
+| ceniza vista por el satélite | 2026-01-29 (noche), 02-11 (noche y día), 02-21 (5 avisos), 03-20 (amanecer), 09-01 (noche), 10-28 (4 avisos) |
+| con ceniza estimada (nubes) | 2026-01-14, 02-06, 09-16 (solo estimada), 09-23, 10-27, 11-04 |
+| sin avisos | 2026-01-17, 02-03, 09-07, 10-05 |
+
+Para cada día, `reglas_terascan.py --r04 0.003 --nube acm3` en tahan (`~/comparacion_terascan/muestra/`) y los GeoTIFF de TeraScan en `/data/ceniza/terascan/centromex/`.
+
 ## Pendiente
 
 1. ~~Comprobar que la diferencia del LAP viene de la máscara de nubes~~ (hecho el 2026-11-05: la máscara explica la diferencia con las reglas de TeraScan en Python; la diferencia con `classify_ash` es la regla de fase).
 2. ~~Ver qué fase de ACTP tienen los píxeles que TeraScan marca y nosotros no~~ (hecho: la mitad en despejado, por el LAP; la otra mitad bajo nube, por la tabla de fase).
-3. Elegir la muestra:
-   - días con emisiones según CENAPRED y días tranquilos, de 2025–2026;
-   - que cubran día, crepúsculo y noche;
-   - con L2 en tahan (en 2026 faltan los días 071, 190 a 216 y 227 a 243).
-4. Evaluar contra CENAPRED a nivel de escaneo y de evento.
-5. Preguntar a Víctor:
+3. ~~Elegir la muestra~~ (hecho con los avisos del VAAC; ver "Muestra").
+4. Evaluar la muestra: por escaneo, contra las horas de los avisos del VAAC, y por día.
+5. Pedir a CENAPRED los eventos con ceniza confirmada (hora, tipo, cómo se confirmó) y los días sin ceniza de la muestra, sobre todo:
+   - el 2026-11-02;
+   - los días sin avisos;
+   - los eventos bajo nubes.
+6. Si hace falta un evento fuera de las fechas con ACTP, generarlo con CSPP desde las L1b (bajando GFS y OISST).
+7. Preguntar a Víctor:
    - si R04 en porcentaje es lo que se pretendía;
    - si en la evaluación la nube (6) cuenta como "no se sabe" o como "sin ceniza";
    - por qué el LAP dejó de ser una prueba propia (ΔT1 < 3 en TeraScan) y pasó a salir del HAP;
