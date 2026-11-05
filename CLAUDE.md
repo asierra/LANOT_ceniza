@@ -10,7 +10,7 @@ Todo el proyecto está en español: código (nombres nuevos, comentarios, docstr
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e '.[pruebas]'          # '.[comparacion]' agrega matplotlib para lanot-compare-ash
+pip install -e '.[pruebas]'
 pytest                                # todas las pruebas
 pytest tests/test_perfiles.py -k nombre
 ACTUALIZA_ESPERADOS=1 pytest tests/test_regresion.py   # regenera los GeoTIFF esperados
@@ -26,12 +26,13 @@ Python ≥ 3.11 (`tomllib`). En tahan, la operación usa el Python 3.12 del sist
   - `classify_ash`: la clasificación;
   - `process_instant`: lectura, recorte, reproyección y escritura del GeoTIFF;
   - `main`: la línea de comandos.
-- `compare_ash.py`: `lanot-compare-ash`.
 - `perfiles/*.toml`: umbrales, tabla de fase y región por volcán. `popocatepetl.toml` es el de omisión y el que usa la operación. `villarrica.toml` es un ejemplo sin calibrar. Se instalan con el paquete (`pyproject.toml`, `include`).
 - `operacion/`: cadena de baja latencia en tahan (CSPP Geo y luego `lanot-detect-ash --clip ashpapergeo`). Se instala en `/opt/lanot/ceniza` con `operacion/instala.sh`. Ver `operacion/README.md`.
 - `herramientas/`:
-  - `corre_version.sh` y `compara_salidas.py` comparan las salidas de dos commits;
+  - `corre_version.sh` y `compara_salidas.py` comparan las salidas de dos commits (`compara_salidas.py` lee también los GeoTIFF de TeraScan);
+  - `reglas_terascan.py` aplica las reglas de TeraScan y `classify_ash` a los mismos L2; `compara_terascan.py` dibuja el mapa de diferencias de un instante (requiere matplotlib);
   - `genera_fixture.py` recorta NetCDF para las pruebas.
+  No se instalan con el paquete.
 - `tests/`: la regresión (`test_regresion.py`) corre tres instantes reales recortados (noche, crepúsculo y día) de `tests/datos/l2` y compara contra `tests/datos/esperado`.
 - `doc/`: registro de decisiones (ver abajo).
 - `paper/`: artículo (Journal of Applied Volcanology) y borrador para SoftwareX/JOSS.

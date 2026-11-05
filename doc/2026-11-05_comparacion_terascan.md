@@ -54,7 +54,9 @@ Son expresiones de `emathp`. Con ΔT1 = BT13 − BT15, ΔT2 = BT11 − BT13 y Δ
 - **Qué compara cada par:**
   - TeraScan contra las reglas de TeraScan en Python mide el efecto de las **entradas**: calibración, remapeo y máscara de nubes de TeraScan contra CSPP.
   - Las reglas de TeraScan contra `classify_ash` mide el efecto del **algoritmo**, con los mismos datos y la misma rejilla.
-- **Herramienta:** `herramientas/compara_salidas.py`, que ya lee el formato de TeraScan.
+- **Herramientas:**
+  - `herramientas/compara_salidas.py` compara carpetas y ya lee el formato de TeraScan;
+  - `herramientas/compara_terascan.py` dibuja el mapa de diferencias de un instante. Antes era `compare_ash.py` (`lanot-compare-ash`); se movió a `herramientas/` el 2026-11-05 y ya no se instala.
 - **Calidad:** TeraScan no es la verdad. La referencia independiente son los reportes de CENAPRED.
 
 ## Día de prueba: 2026-11-02 (día 306)

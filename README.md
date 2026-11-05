@@ -77,7 +77,6 @@ El sistema utiliza múltiples canales infrarrojos y productos derivados para:
 - **affine**: Geotransformaciones afines para georreferenciación
 - **python-dateutil**: Parsing de fechas en formato ISO 8601
 - **rasterio**: Escritura del GeoTIFF con tabla de colores
-- **matplotlib** (opcional): solo para `lanot-compare-ash`; se instala con `pip install '.[comparacion]'`
 
 Las imágenes PNG con mapa base ya no las genera este paquete: se hacen con [LANOT_tools](https://github.com/asierra/LANOT_tools) a partir del GeoTIFF (ver [la refactorización de mayo de 2026](doc/2026-05-01_refactorizacion.md)).
 
@@ -210,41 +209,28 @@ lanot-detect-ash --instant 20191001731 --clip popocatepetlgeo
 # Genera: ceniza_20191001731_geo.tif
 ```
 
-### Comparación de resultados (`lanot-compare-ash`)
+### Comparación con otras salidas
 
-Requiere matplotlib (`pip install '.[comparacion]'`). Permite comparar visualmente dos archivos GeoTIFF de clasificación (p. ej., resultado de TeraScan vs. el de este paquete) y genera una imagen PNG con matrices de confusión y estadísticas.
+Las herramientas de `herramientas/` no se instalan con el paquete:
 
-#### Ejecución básica
+- `compara_salidas.py DIR_A DIR_B`: compara dos carpetas de GeoTIFF por instante (matriz de confusión e instantes con diferencias). Lee también los GeoTIFF de TeraScan.
+- `compara_terascan.py TERASCAN.tif NUESTRO.tif`: mapa PNG de las diferencias de un instante con TeraScan. Requiere matplotlib.
+- `reglas_terascan.py`: aplica las reglas de TeraScan y las nuestras a los mismos L2.
+- `corre_version.sh`: corre un commit dado sobre una lista de instantes.
 
-```bash
-lanot-compare-ash referencia.tif resultado.tif
-```
-
-#### Parámetros
-
-- `ref`: Archivo GeoTIFF de referencia (ej. salida TeraScan).
-- `test`: Archivo GeoTIFF a evaluar.
-- `--output` / `-o`: Nombre del PNG de salida (por defecto: `comp_<nombre_test>.png`).
-
-#### Ejemplo
-
-```bash
-lanot-compare-ash ceniza_20190871402_terascan.tif ceniza_20190871402.tif \
-  --output comparacion.png
-```
+Ver [la comparación con TeraScan](doc/2026-11-05_comparacion_terascan.md).
 
 ## Estructura del proyecto
 
 ```
 LANOT_ceniza/
 ├── detect_ash.py       # Detección de ceniza (lanot-detect-ash)
-├── compare_ash.py      # Comparación con resultados de referencia (lanot-compare-ash)
 ├── pyproject.toml      # Configuración del paquete instalable
 ├── ceniza.qml          # Estilo de QGIS para los GeoTIFF (lo escribe también junto a cada salida)
 ├── ash.cpt             # Paleta de colores histórica (incluye las clases 4 y 5, ya no usadas)
 ├── perfiles/           # Umbrales y región por volcán (TOML); se elige con --perfil
 ├── tests/              # Pruebas (pytest) y recortes de datos reales para la regresión
-├── herramientas/       # Comparación entre versiones y generación de datos de prueba
+├── herramientas/       # Comparación entre versiones y con TeraScan; datos de prueba (no se instalan)
 ├── operacion/          # Cadena de baja latencia en tahan (ver operacion/README.md)
 ├── doc/                # Planes y decisiones del proyecto, con fecha
 └── LICENSE
