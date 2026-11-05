@@ -1,7 +1,7 @@
 # Comparación con la versión de TeraScan
 
 - **Fecha:** 2026-11-05
-- **Estado:** día de prueba (2026-11-02) hecho; falta elegir la muestra y evaluar contra CENAPRED.
+- **Estado:** día de prueba (2026-11-02) hecho y explicado; falta elegir la muestra y evaluar contra CENAPRED.
 
 ## Por qué
 
@@ -78,7 +78,7 @@ Hubo emisiones: casi toda la ceniza está a menos de 100 km del volcán. TeraSca
 | `classify_ash` sobre los mismos datos | 154 | 150 | 401 |
 | operación (`lanot-detect-ash`) | 154 | 150 | 419 |
 
-- **Las entradas pesan más que el algoritmo.** Con las mismas reglas, TeraScan marca el doble de píxeles que con los L2 de CSPP. La diferencia está sobre todo en el LAP: 295 de los 383 píxeles de LAP de TeraScan quedan en 0 con los L2 de CSPP. Por la regla "LAP bajo nube → 0", lo más probable es que la máscara BCM marque más nubes que la de TeraScan. Falta comprobarlo.
+- Sin tolerancia, con las mismas reglas, TeraScan marca el doble de píxeles que con los L2 de CSPP. La sección siguiente muestra que eso viene de la ubicación del píxel y de la máscara de nubes, no de la calibración.
 - **Algoritmo, con los mismos datos:**
   - la CA coincide (49 de 49);
   - del HAP de TeraScan, 197 siguen HAP y 75 pasan a LAP en el nuestro (refinamiento por ΔT2);
@@ -92,16 +92,50 @@ Hubo emisiones: casi toda la ceniza está a menos de 100 km del volcán. TeraSca
   - a las 13 UTC (amanecer) el nuestro ve ceniza en 9 de 10 escaneos y TeraScan en ninguno;
   - de 19 a 23 UTC el nuestro ve ceniza en 12 de 52 escaneos y TeraScan en 6.
 
+### Qué explica las diferencias
+
+Ceniza = clases 1 a 4. "±1 px": cuenta como coincidencia si hay ceniza del otro lado en el píxel o en uno vecino (ventana de 3 × 3), por el corrimiento de una columna.
+
+| salida comparada con TeraScan | ceniza de TeraScan cubierta, exacta / ±1 px | ceniza propia cerca de la de TeraScan, ±1 px |
+|---|---|---|
+| reglas de TeraScan, máscara BCM | 47 % / 89 % | 99 % |
+| reglas de TeraScan, solo "nublado" (ACM = 3) | 55 % / **96 %** | **99 %** |
+| reglas de TeraScan, sin máscara | 57 % / 97 % | 76 % |
+| `classify_ash` | 26 % / **62 %** | 90 % |
+
+- **Las entradas casi no pesan.** Con 1 píxel de tolerancia y la máscara "solo nublado" de CSPP, las reglas de TeraScan sobre nuestros L2 reproducen la ceniza de TeraScan: cubren el 96 % y casi no agregan. La máscara de TeraScan se parece a "solo nublado": su clase 4 (HAP bajo nube) aparece en 4 píxeles en todo el día. Sin máscara sobran píxeles, así que alguna máscara sí aplica.
+- **La diferencia de fondo es el algoritmo.** `classify_ash` cubre el 62 % de la ceniza de TeraScan; lo que marca está, en un 90 %, junto a ceniza de TeraScan. De los 328 píxeles de TeraScan que no vemos (±1 px):
+  - 281 (86 %) están junto a píxeles que marcamos como nube (6);
+  - 296 (90 %) los ven las reglas de TeraScan sobre los mismos datos;
+  - por clase de TeraScan: 213 LAP, 111 HAP y 4 HAP bajo nube.
+
+  Que estén junto a nube solo dice que la pluma está rodeada de nube. La fase ACTP del propio píxel (escrita en la rejilla de TeraScan) reparte lo que nos falta en dos causas casi iguales:
+
+  | fase ACTP | píxeles que nos faltan | de ellos, LAP de TeraScan | HAP de TeraScan |
+  |---|---|---|---|
+  | despejado | 171 (52 %) | 126 | 45 |
+  | hielo | 87 | 32 | 55 |
+  | agua | 52 | 38 | 14 |
+  | mixta | 12 | 11 | 1 |
+  | superenfriada | 6 | 6 | 0 |
+
+  - **Fase de nube (48 %):** la tabla del perfil quita el HAP bajo hielo y el LAP bajo agua, superenfriada, mixta o hielo. TeraScan dice "hay ceniza"; la nuestra dice sin ceniza o "no se puede saber" (6).
+  - **Reglas, en despejado (52 %):** casi todo es LAP. El LAP de TeraScan es una prueba propia con ΔT1 < 3 y ΔT2 > −1. El nuestro solo sale del HAP (ΔT1 < 1) cuando −1.5 ≤ ΔT2 < −1, así que la franja 1 ≤ ΔT1 < 3 no da LAP nunca. El HAP en despejado que nos falta (45) no lo explican las reglas: con fase despejado, nuestro HAP usa los mismos umbrales (el R04 nuestro es incluso más permisivo). Puede venir de la ubicación de la fase (vecino más cercano en la rejilla de TeraScan) o de los datos; falta verificarlo con los valores de cada píxel.
+- Las dos son diferencias de criterio, no errores. Cuál acierta más se decide con CENAPRED.
+
 Archivos: GeoTIFF de TeraScan en `/data/ceniza/terascan/centromex/`; salidas nuestras en `/data/ceniza/terascan/piloto_20261102/`; corridas en `tahan:~/comparacion_terascan/`.
 
 ## Pendiente
 
-1. Comprobar que la diferencia del LAP viene de la máscara de nubes: correr las reglas de TeraScan sin máscara de nubes.
-2. Elegir la muestra:
+1. ~~Comprobar que la diferencia del LAP viene de la máscara de nubes~~ (hecho el 2026-11-05: la máscara explica la diferencia con las reglas de TeraScan en Python; la diferencia con `classify_ash` es la regla de fase).
+2. ~~Ver qué fase de ACTP tienen los píxeles que TeraScan marca y nosotros no~~ (hecho: la mitad en despejado, por el LAP; la otra mitad bajo nube, por la tabla de fase).
+3. Elegir la muestra:
    - días con emisiones según CENAPRED y días tranquilos, de 2025–2026;
    - que cubran día, crepúsculo y noche;
    - con L2 en tahan (en 2026 faltan los días 071, 190 a 216 y 227 a 243).
-3. Evaluar contra CENAPRED a nivel de escaneo y de evento.
-4. Preguntar a Víctor:
+4. Evaluar contra CENAPRED a nivel de escaneo y de evento.
+5. Preguntar a Víctor:
    - si R04 en porcentaje es lo que se pretendía;
+   - si en la evaluación la nube (6) cuenta como "no se sabe" o como "sin ceniza";
+   - por qué el LAP dejó de ser una prueba propia (ΔT1 < 3 en TeraScan) y pasó a salir del HAP;
    - si la versión de TeraScan debe seguir como referencia.
