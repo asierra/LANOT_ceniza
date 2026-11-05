@@ -12,11 +12,15 @@ Lee los dos formatos que ha tenido la salida:
 - 1 banda con valores de clase (desde mayo de 2026);
 - RGBA de 4 bandas (diciembre de 2025): se decodifica por color. Ahí "sin ceniza" y
   "sin datos" son ambos transparentes y se cuentan como 0.
+También lee los de TeraScan (AAAA.MMDD.HHMMSS.*.tif): 1 banda float32 con la clase y
+−3.4e38 donde no hay ceniza; tampoco distinguen "sin ceniza" de "sin datos". Sus
+coordenadas (datum "Spherical Earth") se toman como EPSG:4326.
 Entre mayo y octubre de 2026 el "sin ceniza" (0) se guardaba como 255. Para comparar esas
 salidas con las de ahora, --une-sin-ceniza cuenta 0 y 255 juntos (como en RGBA).
 Si las rejillas no coinciden, B se remuestrea a la de A (vecino más cercano).
 """
 import argparse
+import datetime
 import re
 import sys
 from pathlib import Path
@@ -31,7 +35,8 @@ COLORES_RGBA = {(255, 0, 0): 1, (255, 165, 0): 2, (255, 255, 0): 3, (0, 255, 0):
 
 
 def lee(ruta):
-    """Devuelve (clases, perfil, era_rgba)."""
+    """Devuelve (clases, perfil, sin_datos_como_0): el tercero es True si el formato no
+    distingue "sin ceniza" de "sin datos" (RGBA o TeraScan)."""
     with rasterio.open(ruta) as d:
         perfil = {"crs": d.crs, "transform": d.transform, "shape": (d.height, d.width)}
         if d.count >= 4:
@@ -40,6 +45,10 @@ def lee(ruta):
             for rgb, clase in COLORES_RGBA.items():
                 c[(r == rgb[0]) & (g == rgb[1]) & (b == rgb[2]) & (a > 0)] = clase
             return c, perfil, True
+        if np.issubdtype(np.dtype(d.dtypes[0]), np.floating):  # TeraScan
+            v = d.read(1)
+            perfil["crs"] = rasterio.crs.CRS.from_epsg(4326)
+            return np.where(np.isfinite(v) & (v > 0) & (v < 255), np.rint(v), 0).astype(np.uint8), perfil, True
         return d.read(1), perfil, False
 
 
@@ -49,7 +58,7 @@ def a_rejilla(c, origen, destino):
         return c
     out = np.full(destino["shape"], 255, np.uint8)
     reproject(c, out, src_transform=origen["transform"], src_crs=origen["crs"], dst_transform=destino["transform"],
-              dst_crs=destino["crs"], resampling=Resampling.nearest, src_nodata=None, dst_nodata=255)
+              dst_crs=destino["crs"], resampling=Resampling.nearest, src_nodata=255, dst_nodata=255)
     return out
 
 
@@ -57,8 +66,12 @@ def por_instante(carpeta):
     archivos = {}
     for f in sorted(Path(carpeta).glob("*.tif")):
         m = re.search(r"(\d{11})", f.name)
+        t = re.match(r"(\d{4})\.(\d{2})(\d{2})\.(\d{4})\d{2}\.", f.name)  # TeraScan
         if m:
             archivos[m.group(1)] = f
+        elif t:
+            jjj = datetime.date(int(t[1]), int(t[2]), int(t[3])).timetuple().tm_yday
+            archivos[f"{t[1]}{jjj:03d}{t[4]}"] = f
     return archivos
 
 
