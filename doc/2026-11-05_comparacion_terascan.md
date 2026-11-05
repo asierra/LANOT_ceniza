@@ -37,7 +37,7 @@ Son expresiones de `emathp`. Con ΔT1 = BT13 − BT15, ΔT2 = BT11 − BT13 y Δ
 ### Salida
 
 - GeoTIFF de una banda, float32, 432 × 719, en lat/lon (datum "Spherical Earth"), de 107.23° a 93.84° O y de 14.94° a 22.72° N.
-- La clase es el valor (1 CA, 2 HAP, 3 LAP, 4 HAP bajo nube). Lo demás es −3.4·10³⁸, así que no se distingue "sin ceniza" de "sin datos".
+- La clase es el valor (1 CA, 2 HAP, 3 LAP, 4). El 4 sale de "HAP bajo nube" en el script, pero la paleta (`ash.cpt`) lo llama "cloud" y lo pinta de verde: quien ve el producto lo lee como nube. En la muestra, casi todo el 4 está a cientos de km del volcán, así que en la evaluación **no cuenta como ceniza** (en el día de prueba sí se contó, pero ese día casi no hubo 4). Lo demás es −3.4·10³⁸, así que no se distingue "sin ceniza" de "sin datos".
 - Nombre: `AAAA.MMDD.HHMMSS.goes-19.centromex.tif` (inicio del escaneo).
 
 ### Archivo
@@ -163,12 +163,44 @@ Los días con ceniza estimada casi todos son de mayo a agosto (temporada de lluv
 
 Para cada día, `reglas_terascan.py --r04 0.003 --nube acm3` en tahan (`~/comparacion_terascan/muestra/`) y los GeoTIFF de TeraScan en `/data/ceniza/terascan/centromex/`.
 
+### Resultados (2026-11-05)
+
+`herramientas/evalua_muestra.py`: 3 869 escaneos con las tres salidas. Ceniza = clases 1 a 3. "Ve ceniza" = al menos 1 píxel a menos de 100 km del volcán. El detalle por escaneo está en `/data/ceniza/terascan/muestra/escaneos.csv`.
+
+**Avisos del VAAC** (algún escaneo con ceniza a ±15 min de la observación):
+
+| avisos | TeraScan | reglas de TeraScan en Python | nuestra |
+|---|---|---|---|
+| 29 con ceniza vista por el satélite | 25 | 22 | 21 |
+| 7 con ceniza solo estimada (nubes) | 5 | 4 | 4 |
+
+**Escaneos con ceniza cerca del volcán, en los 4 días sin avisos** (949 escaneos):
+
+| TeraScan | reglas de TeraScan en Python | nuestra |
+|---|---|---|
+| 475 (50 %) | 131 (14 %) | 141 (15 %) |
+
+**Píxeles de ceniza a más de 200 km del volcán, suma de cada día:**
+
+| | TeraScan | reglas de TeraScan en Python | nuestra |
+|---|---|---|---|
+| mínimo | 22 | 10 | 134 |
+| mediana | ~7 000 | ~730 | ~960 |
+| máximo | 153 852 (01-14) | 7 623 (01-14) | 7 085 (10-28) |
+
+- **TeraScan ve ceniza cerca del volcán en la mitad de los escaneos, aun en días sin avisos.** Con esa frecuencia, en una ventana de ±15 min (unos 7 escaneos) casi siempre habrá detección, así que sus 25 de 29 aciertos dicen poco. La nuestra marca el 15 % de los escaneos en esos días y acierta 21 de 29.
+- No se sabe si la ceniza cerca del volcán en días sin avisos es real: CENAPRED reporta decenas de exhalaciones al día con "ligeras cantidades de ceniza", y el VAAC no avisa de todas. **Para eso hace falta CENAPRED.**
+- **Lejos del volcán, TeraScan tiene muchas más falsas alarmas.** Las mismas reglas sobre nuestros datos dan casi siempre bastante menos (de 2 a 270 veces menos según el día), así que vienen sobre todo de las entradas de TeraScan (L1b y máscara de nubes). Contando su clase 4 serían de 76 000 a 357 000 píxeles al día en 12 de los 16 días. La nuestra también tiene falsas alarmas lejos (hasta 7 000 píxeles al día); falta ver qué son.
+- La conclusión del día de prueba ("las entradas casi no pesan") vale para ese día, no en general: en septiembre, cerca del volcán, TeraScan ve ceniza en 126 a 213 escaneos por día y sus reglas sobre nuestros datos en 2 a 38.
+
 ## Pendiente
 
 1. ~~Comprobar que la diferencia del LAP viene de la máscara de nubes~~ (hecho el 2026-11-05: la máscara explica la diferencia con las reglas de TeraScan en Python; la diferencia con `classify_ash` es la regla de fase).
 2. ~~Ver qué fase de ACTP tienen los píxeles que TeraScan marca y nosotros no~~ (hecho: la mitad en despejado, por el LAP; la otra mitad bajo nube, por la tabla de fase).
 3. ~~Elegir la muestra~~ (hecho con los avisos del VAAC; ver "Muestra").
-4. Evaluar la muestra: por escaneo, contra las horas de los avisos del VAAC, y por día.
+4. ~~Evaluar la muestra contra los avisos del VAAC~~ (hecho; ver "Resultados"). Mejoras posibles:
+   - exigir que la ceniza caiga dentro del área del aviso (los avisos traen el polígono);
+   - ver qué son las falsas alarmas lejanas de la nuestra (10-28, 09-01, 09-07).
 5. Pedir a CENAPRED los eventos con ceniza confirmada (hora, tipo, cómo se confirmó) y los días sin ceniza de la muestra, sobre todo:
    - el 2026-11-02;
    - los días sin avisos;

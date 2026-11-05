@@ -7,9 +7,10 @@ Sirve para ver los escaneos que herramientas/compara_salidas.py señala con más
 Requiere matplotlib (pip install matplotlib).
 
 Lee los dos archivos con compara_salidas.lee y lleva el nuestro a la rejilla de TeraScan
-(vecino más cercano). Clases de TeraScan (script ash_new_m8_altura): 1 CA, 2 HAP, 3 LAP y
-4 = HAP bajo nube; para comparar la clase, el 4 cuenta como HAP. TeraScan no distingue
-"sin ceniza" de "sin datos". Las nuestras: 1 CA, 2 HAP, 3 LAP, 6 nube, 255 sin datos.
+(vecino más cercano). Clases de TeraScan (script ash_new_m8_altura): 1 CA, 2 HAP, 3 LAP y 4.
+El 4 sale de "HAP bajo nube", pero su paleta lo pinta como "cloud" y casi todo lo que marca
+está lejos del volcán; aquí no cuenta como ceniza (--cuenta-4 lo cuenta como HAP). TeraScan no
+distingue "sin ceniza" de "sin datos". Las nuestras: 1 CA, 2 HAP, 3 LAP, 6 nube, 255 sin datos.
 
 En el mapa:
     coincide       ceniza en los dos, misma clase
@@ -52,10 +53,10 @@ CATEGORIAS = [  # (valor en el mapa, nombre, color)
 ]
 
 
-def compara(ts, nuestra):
+def compara(ts, nuestra, cuenta_4=False):
     """Mapa de categorías (ver CATEGORIAS) y conteo por categoría."""
-    ts_clase = np.where(ts == 4, 2, ts)  # HAP bajo nube cuenta como HAP
-    ceniza_ts = np.isin(ts, [1, 2, 3, 4])
+    ts_clase = np.where(ts == 4, 2, ts)  # con cuenta_4, el HAP bajo nube cuenta como HAP
+    ceniza_ts = np.isin(ts, [1, 2, 3, 4] if cuenta_4 else [1, 2, 3])
     ceniza_n = np.isin(nuestra, [1, 2, 3])
     mapa = np.zeros(ts.shape, np.uint8)
     mapa[ceniza_ts & ceniza_n & (ts_clase == nuestra)] = 1
@@ -64,7 +65,7 @@ def compara(ts, nuestra):
     mapa[ceniza_ts & ~ceniza_n & (nuestra != NUBE)] = 4
     mapa[ceniza_ts & (nuestra == NUBE)] = 5
     conteo = {nombre: int((mapa == v).sum()) for v, nombre, _ in CATEGORIAS[1:]}
-    conteo["TeraScan HAP bajo nube (4)"] = int((ts == 4).sum())
+    conteo["TeraScan 4 (HAP bajo nube)"] = int((ts == 4).sum())
     return mapa, conteo
 
 
@@ -86,13 +87,14 @@ def main():
     ap.add_argument("terascan", type=Path)
     ap.add_argument("nuestro", type=Path)
     ap.add_argument("-o", "--output", type=Path, help="PNG de salida (por omisión, dif_<nuestro>.png)")
+    ap.add_argument("--cuenta-4", action="store_true", help="cuenta el 4 de TeraScan como HAP")
     ap.add_argument("--radio", type=float, default=150, help="km alrededor del volcán (0: región completa)")
     args = ap.parse_args()
 
     ts, perfil, _ = lee(args.terascan)
     nuestra, perfil_n, _ = lee(args.nuestro)
     nuestra = a_rejilla(nuestra, perfil_n, perfil)
-    mapa, conteo = compara(ts, nuestra)
+    mapa, conteo = compara(ts, nuestra, args.cuenta_4)
 
     print(f"TeraScan: {args.terascan.name}\nNuestro:  {args.nuestro.name}\n")
     for nombre, n in conteo.items():

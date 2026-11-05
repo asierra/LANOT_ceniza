@@ -7,12 +7,16 @@
 (terascan_py/ y nuestra/). --terascan, los GeoTIFF de TeraScan. --avisos, el CSV de
 avisos_vaac.py.
 
-Por escaneo cuenta los píxeles de ceniza a menos de --radio km del volcán (ceniza: 1 a 3, y el
-4 de TeraScan) y escribe MUESTRA/escaneos.csv. Luego reporta:
+Por escaneo cuenta los píxeles de ceniza a menos de --radio km del volcán y escribe
+MUESTRA/escaneos.csv. Ceniza son las clases 1 a 3. El 4 de TeraScan (HAP bajo nube en su
+script) se pinta como "cloud" en su paleta y casi todo lo que marca está lejos del volcán;
+solo cuenta como ceniza con --cuenta-4. Luego reporta:
 
 - por aviso del VAAC, si cada salida ve ceniza en algún escaneo a ±--ventana minutos de la
   hora de observación, separando la ceniza vista por el satélite de la solo estimada;
-- por día, en cuántos escaneos ve ceniza cada salida.
+- por día, en cuántos escaneos ve ceniza cada salida cerca del volcán, y cuántos píxeles marca
+  a más de --lejos km. La ceniza del Popocatépetl puede viajar lejos, pero en días sin avisos
+  lo de lejos son falsas alarmas.
 
 Una salida "ve ceniza" en un escaneo si tiene al menos --minimo píxeles cerca del volcán. Solo
 se cuentan los escaneos que existen en las tres salidas.
@@ -33,7 +37,7 @@ VOLCAN = (19.023, -98.622)
 SALIDAS = ("terascan", "reglas_ts", "nuestra")
 
 
-def cerca_del_volcan(perfil, radio_km):
+def distancia_al_volcan(perfil):
     h, w = perfil["shape"]
     t = perfil["transform"]
     lon = t.c + t.a * (np.arange(w) + 0.5)
@@ -41,7 +45,7 @@ def cerca_del_volcan(perfil, radio_km):
     lon, lat = np.meshgrid(lon, lat)
     p1, p2 = np.radians(lat), np.radians(VOLCAN[0])
     c = np.sin(p1) * np.sin(p2) + np.cos(p1) * np.cos(p2) * np.cos(np.radians(lon - VOLCAN[1]))
-    return 6371 * np.arccos(np.clip(c, -1, 1)) < radio_km
+    return 6371 * np.arccos(np.clip(c, -1, 1))
 
 
 def instante_a_fecha(inst):
@@ -56,38 +60,48 @@ def main():
     ap.add_argument("--radio", type=float, default=100, help="km alrededor del volcán")
     ap.add_argument("--minimo", type=int, default=1, help="píxeles para decir que hay ceniza")
     ap.add_argument("--ventana", type=int, default=15, help="minutos alrededor de la hora del aviso")
+    ap.add_argument("--cuenta-4", action="store_true", help="cuenta el 4 de TeraScan (HAP bajo nube) como ceniza")
+    ap.add_argument("--lejos", type=float, default=200, help="km a partir de los que se cuenta la ceniza lejana")
     args = ap.parse_args()
 
     ts = por_instante(args.terascan)
     escaneos = {}  # instante -> {salida: píxeles}
-    mascara = None
+    cerca = lejos = None
+    clases = [1, 2, 3, 4] if args.cuenta_4 else [1, 2, 3]
     for dia in sorted(d for d in args.muestra.iterdir() if (d / "nuestra").is_dir()):
         py, nu = por_instante(dia / "terascan_py"), por_instante(dia / "nuestra")
         for inst in sorted(set(py) & set(nu) & set(ts)):
             a, pa, _ = lee(ts[inst])
-            if mascara is None:
-                mascara = cerca_del_volcan(pa, args.radio)
-            fila = {"terascan": int((np.isin(a, [1, 2, 3, 4]) & mascara).sum())}
-            for nombre, ruta in (("reglas_ts", py[inst]), ("nuestra", nu[inst])):
-                b, pb, _ = lee(ruta)
-                b = a_rejilla(b, pb, pa)
-                fila[nombre] = int((np.isin(b, [1, 2, 3, 4]) & mascara).sum())
+            if cerca is None:
+                dist = distancia_al_volcan(pa)
+                cerca, lejos = dist < args.radio, dist > args.lejos
+            fila = {}
+            for nombre, ruta in (("terascan", None), ("reglas_ts", py[inst]), ("nuestra", nu[inst])):
+                if ruta is None:
+                    b = a
+                else:
+                    b, pb, _ = lee(ruta)
+                    b = a_rejilla(b, pb, pa)
+                ceniza = np.isin(b, clases)
+                fila[nombre] = int((ceniza & cerca).sum())
+                fila[nombre + "_lejos"] = int((ceniza & lejos).sum())
             escaneos[inst] = fila
     if not escaneos:
         sys.exit("No hay escaneos con las tres salidas.")
 
     with open(args.muestra / "escaneos.csv", "w", newline="") as f:
         w = csv.writer(f, lineterminator="\n")
-        w.writerow(["instante", "fecha_utc", *SALIDAS])
+        columnas = [*SALIDAS, *(s + "_lejos" for s in SALIDAS)]
+        w.writerow(["instante", "fecha_utc", *columnas])
         for inst, fila in sorted(escaneos.items()):
-            w.writerow([inst, instante_a_fecha(inst).strftime("%Y-%m-%d %H:%M"), *(fila[s] for s in SALIDAS)])
+            w.writerow([inst, instante_a_fecha(inst).strftime("%Y-%m-%d %H:%M"), *(fila[c] for c in columnas)])
 
     ve = {inst: {s: fila[s] >= args.minimo for s in SALIDAS} for inst, fila in escaneos.items()}
     tiempos = sorted((instante_a_fecha(i), i) for i in escaneos)
     dias = {t.date() for t, _ in tiempos}
 
     # Por aviso
-    print(f"Ceniza: ≥ {args.minimo} píxeles a < {args.radio:g} km del volcán. {len(escaneos)} escaneos en {len(dias)} días.\n")
+    print(f"Ceniza: clases {clases}, ≥ {args.minimo} píxeles a < {args.radio:g} km del volcán. {len(escaneos)} escaneos en {len(dias)} días.\n")
     print(f"Avisos del VAAC: ¿alguna salida ve ceniza a ±{args.ventana} min de la observación?")
     aciertos = collections.defaultdict(lambda: collections.Counter())
     detalle = []
@@ -115,11 +129,13 @@ def main():
             print(f"    {obs}  {tipo:20s} " + "  ".join(f"{s}={'sí' if res[s] else 'no'}" for s in SALIDAS))
 
     # Por día
-    print("\nPor día: escaneos con ceniza (de los escaneos con las tres salidas)")
-    print(f"  {'día':10s} {'escaneos':>8s}" + "".join(f"{s:>11s}" for s in SALIDAS))
+    print(f"\nPor día: escaneos con ceniza a < {args.radio:g} km | píxeles de ceniza a > {args.lejos:g} km (suma del día)")
+    print(f"  {'día':10s} {'escaneos':>8s}" + "".join(f"{s:>11s}" for s in SALIDAS) + " |"
+          + "".join(f"{s:>11s}" for s in SALIDAS))
     for d in sorted(dias):
         insts = [i for t, i in tiempos if t.date() == d]
-        print(f"  {d}  {len(insts):8d}" + "".join(f"{sum(ve[i][s] for i in insts):11d}" for s in SALIDAS))
+        print(f"  {d}  {len(insts):8d}" + "".join(f"{sum(ve[i][s] for i in insts):11d}" for s in SALIDAS) + " |"
+              + "".join(f"{sum(escaneos[i][s + '_lejos'] for i in insts):11d}" for s in SALIDAS))
     print(f"\nPor escaneo: {args.muestra / 'escaneos.csv'}")
 
 
