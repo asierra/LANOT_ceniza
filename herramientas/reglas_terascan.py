@@ -19,7 +19,9 @@ Las reglas son las del script de TeraScan `ash_new_m8_altura` (agosto de 2024; c
     crepúsculo (70 a 85):    lo mismo, todo con R04 > umbral, y HAP con BT14 < 273
     día (SZA < 70):          lo mismo, todo con R04 > umbral (BT14 < 273 solo en LAP)
     SZA exactamente 70 u 85: 0
-    nube (BCM de CSPP en lugar de la máscara de TeraScan): HAP → 4, LAP → 0
+    nube: HAP → 4, LAP → 0. En lugar de la máscara de TeraScan se usa la de CSPP (ACM),
+        según --nube: bcm (nublado o probablemente nublado; por omisión), acm3 (solo
+        nublado) o ninguna
 
 Supuestos: TeraScan recibe los archivos en orden alfabético (cloudmask, C04, C07, C11, C13,
 C14, C15), y no se sabe si su R04 está en fracción o en porcentaje; por eso --r04 (0.3 tal
@@ -68,7 +70,7 @@ def lee_cmi(ruta, ys, xs):
         return ds["CMI"].data[ys, xs]
 
 
-def procesa(carpeta, instante, plantilla, salida, eph, ts, r04_min):
+def procesa(carpeta, instante, plantilla, salida, eph, ts, r04_min, mascara="bcm"):
     archivos, faltan = detect_ash.busca_archivos(carpeta, instante, detect_ash.PRODUCTOS + ["C14"])
     acm = sorted(carpeta.glob(f"*_ABI-L2-ACM?-*_s{instante}*.nc"))
     if faltan or not acm:
@@ -96,7 +98,12 @@ def procesa(carpeta, instante, plantilla, salida, eph, ts, r04_min):
     with xr.open_dataset(archivos["ACTP"]) as ds:
         fase = ds["Phase"].data[ys, xs]
     with xr.open_dataset(acm[-1]) as ds:
-        nube = ds["BCM"].data[ys, xs]
+        if mascara == "bcm":
+            nube = ds["BCM"].data[ys, xs]
+        elif mascara == "acm3":
+            nube = (ds["ACM"].data[ys, xs] == 3).astype(np.uint8)
+        else:
+            nube = np.zeros(c04.shape, np.uint8)
 
     lon, lat = Transformer.from_crs(crs_goes, "EPSG:4326", always_xy=True).transform(*np.meshgrid(x[xs], y[ys]))
     validos = (np.isfinite(c04) & np.isfinite(c07) & np.isfinite(c11) & np.isfinite(c13) & np.isfinite(c15)
@@ -119,7 +126,10 @@ def procesa(carpeta, instante, plantilla, salida, eph, ts, r04_min):
                            width=destino.shape[1], count=1, dtype="uint8", crs="EPSG:4326",
                            transform=plantilla["transform"], nodata=SIN_DATOS, compress="LZW") as d:
             d.write(destino, 1)
-            d.update_tags(reglas=nombre, r04_min=str(r04_min) if nombre == "terascan_py" else "")
+            if nombre == "terascan_py":
+                d.update_tags(reglas=nombre, r04_min=str(r04_min), nube=mascara)
+            else:
+                d.update_tags(reglas=nombre)
 
 
 def main():
@@ -128,6 +138,8 @@ def main():
     ap.add_argument("--plantilla", type=Path, required=True, help="un GeoTIFF de TeraScan: de él se toma la rejilla")
     ap.add_argument("--salida", type=Path, required=True)
     ap.add_argument("--r04", type=float, default=0.3, help="umbral de R04 de TeraScan (0.3; 0.003 si es porcentaje)")
+    ap.add_argument("--nube", choices=["bcm", "acm3", "ninguna"], default="bcm",
+                    help="máscara de nubes de CSPP en lugar de la de TeraScan (por omisión, bcm)")
     ap.add_argument("instantes", nargs="+")
     args = ap.parse_args()
 
@@ -140,7 +152,7 @@ def main():
     eph, ts = detect_ash.carga_efemerides()
     for n, inst in enumerate(instantes, 1):
         try:
-            procesa(args.l2, inst, plantilla, args.salida, eph, ts, args.r04)
+            procesa(args.l2, inst, plantilla, args.salida, eph, ts, args.r04, args.nube)
             print(f"[{n}/{len(instantes)}] {inst}")
         except Exception as e:  # que un instante malo no detenga el resto
             print(f"[{n}/{len(instantes)}] {inst}: ERROR {e}", file=sys.stderr)
