@@ -259,7 +259,17 @@ TeraScan no usa ACTP: su script recibe la máscara de nubes de TeraScan, que sol
 - La fase (ACTP) cambia en 4 píxeles de todo el CONUS, ninguno en la región de la operación.
 - El GeoTIFF de ceniza `ashpapergeo` es idéntico. En el CONUS completo cambian 4 de 3 750 000 píxeles.
 
-Con la configuración nueva, la latencia de la operación bajaría de ~259 a ~237 s, casi la de TeraScan (236 s). El costo es que cada 5 minutos se usan hasta 48 núcleos de tahan durante ~17 s. No se ha aplicado a la operación. Las corridas de prueba están en `tahan:~/prueba_cspp/`.
+**24 segmentos.** En tahan corre también la cadena polar, así que se usan 24 trabajos y no 48. Tiempos con `-j 24` y CMIP con `-P 16`:
+
+| partición | tiempo |
+|---|---|
+| 12 × 2 (125 filas × 1250 columnas) | 44.4 y 46.0 s |
+| 6 × 4 (250 × 625) | 41.5 y 42.9 s |
+| 4 × 4 (375 × 625) | 43.5 s |
+
+**El pronóstico numérico cambia el resultado, no la partición.** La configuración actual, corrida dos veces con dos horas de diferencia, dio máscaras distintas en 61 513 píxeles (755 en la región), porque entre una y otra llegaron al caché un RAP (17:30) y un GFS (17:54) nuevos, y CSPP usa el más reciente. Comparadas con una corrida de la misma hora, las tres particiones dan el mismo ACM y BCM. La fase difiere en 1 a 8 píxeles de todo el CONUS, ninguno en la región. Consecuencia: reprocesar un escaneo horas después puede dar un producto algo distinto al de la operación.
+
+**Aplicado en `operacion/procesa_ceniza.sh`** (6 × 4, `TRABAJOS=24`, `PROCESOS_CMIP=16`; se cambian con variables de entorno). Probado en tahan con `BASE` propio: CSPP tardó 41.9 s y el escaneo quedó `ok`. La latencia debería bajar de ~259 a ~236 s, casi la de TeraScan. Falta reinstalar en tahan (`git pull && operacion/instala.sh`) y medir un día completo. Las corridas de prueba están en `tahan:~/prueba_cspp/`.
 
 ## Pendiente
 
@@ -274,7 +284,7 @@ Con la configuración nueva, la latencia de la operación bajaría de ~259 a ~23
    - los días sin avisos;
    - los eventos bajo nubes.
 6. Si hace falta un evento fuera de las fechas con ACTP, generarlo con CSPP desde las L1b (bajando GFS y OISST).
-7. Decidir si la operación usa la configuración nueva de CSPP (ver "Acortar CSPP").
+7. Reinstalar en tahan con la configuración nueva de CSPP y medir la latencia de un día completo (ver "Acortar CSPP").
 8. Preguntar a Víctor:
    - si R04 en porcentaje es lo que se pretendía;
    - si en la evaluación la nube (6) cuenta como "no se sabe" o como "sin ceniza";

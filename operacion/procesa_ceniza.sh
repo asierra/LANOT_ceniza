@@ -1,8 +1,8 @@
 #!/bin/bash
 # Producto de ceniza de baja latencia a partir del escaneo CONUS, en tahan.
 #
-# Corre CSPP Geo AIT solo con lo que necesita el algoritmo (cmi, acm, actp) y en 4 segmentos,
-# y luego detect_ash.py, recortado a la región RECORTE. No toca la cadena de cirrus: lee las
+# Corre CSPP Geo AIT solo con lo que necesita el algoritmo (cmi, acm, actp), repartido en 24
+# segmentos, y luego detect_ash.py, recortado a la región RECORTE. No toca la cadena de cirrus: lee las
 # L1b y el caché dinámico de CSPP del /data de cirrus, montado en tahan como /data1, y escribe
 # todo en /data/ceniza/oper.
 #
@@ -16,7 +16,7 @@
 L1B_DIR=${L1B_DIR:-/data1/input/abi/l1b/conus}         # L1b CONUS de cirrus (su /data en /data1)
 BASE=${BASE:-/data/ceniza/oper}                        # trabajo, caché temporal, salida y CSV
 # Región de detect_ash.py (--clip). ashpapergeo: la región del artículo, en lat/lon (EPSG:4326).
-# RECORTE= (vacío) genera el GeoTIFF CONUS completo, en proyección GOES (~9 s más por escaneo).
+# RECORTE= (vacío) genera el GeoTIFF CONUS completo, en proyección GOES (~1 s más por escaneo).
 RECORTE=${RECORTE-ashpapergeo}
 SALIDA=${SALIDA:-$BASE/${RECORTE:-conus}}              # GeoTIFF de ceniza
 TCACHE=$BASE/aitf_temporal_cache                       # caché temporal propio de CSPP
@@ -32,7 +32,15 @@ export CSPP_GEO_AITF_ANCIL_TIMEOUT=7200
 # Pasada mínima para la ceniza. Con 4 segmentos, ACM y ACTP salen idénticos a los de la
 # corrida completa de cirrus (comparado píxel a píxel el 2026-10-18).
 PRODUCTOS=${PRODUCTOS:-cmi,acm,actp}
-FILAS_SEGMENTO=${FILAS_SEGMENTO:-375}
+# Reparto del trabajo de CSPP: 6 × 4 segmentos de 250 filas × 625 columnas (a 2 km), hasta
+# TRABAJOS a la vez, y CMIP en PROCESOS_CMIP procesos. Baja CSPP de ~65 a ~43 s con el mismo
+# ACM, ACTP y CMI en la región de la operación (2026-11-05; doc/2026-11-05_comparacion_terascan.md).
+# 24 y no más porque en tahan corre también la cadena polar. Antes: FILAS_SEGMENTO=375,
+# COLUMNAS_SEGMENTO=2500, TRABAJOS=10, PROCESOS_CMIP=1.
+FILAS_SEGMENTO=${FILAS_SEGMENTO:-250}
+COLUMNAS_SEGMENTO=${COLUMNAS_SEGMENTO:-625}
+TRABAJOS=${TRABAJOS:-24}
+PROCESOS_CMIP=${PROCESOS_CMIP:-16}
 
 # Requisitos: mejor fallar aquí, con un mensaje claro, que a medio camino.
 falta () { echo "Error: $*" >&2; exit 1; }
@@ -106,7 +114,9 @@ t_ini=$(date +%s.%N)
 
 mkdir -p "$work"
 if ! aitf -o "$work" --cache-only --temporal-cache-dir $TCACHE \
-          --products $PRODUCTOS --max-segment-rows $FILAS_SEGMENTO -q "$c01" > "$work/aitf.out" 2>&1; then
+          --products $PRODUCTOS --max-segment-rows $FILAS_SEGMENTO --max-segment-cols $COLUMNAS_SEGMENTO \
+          -j $TRABAJOS --cmip-args "--cmi --environment CG -P $PROCESOS_CMIP" \
+          -q "$c01" > "$work/aitf.out" 2>&1; then
     t_cspp=$(date +%s.%N)
     log "Error: aitf falló para $id; ver $work/aitf.out"
     registra error_cspp

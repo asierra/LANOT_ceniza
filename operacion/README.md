@@ -3,8 +3,8 @@
 `procesa_ceniza.sh` genera el producto de ceniza de cada escaneo CONUS sin esperar a la cadena L2 completa de cirrus:
 
 1. Lee las L1b CONUS que cirrus trae de la estación (`/data1/input/abi/l1b/conus`, que es el `/data` de cirrus montado en tahan).
-2. Corre CSPP Geo AIT solo con `cmi,acm,actp` y en 4 segmentos (`--max-segment-rows 375`). Usa el caché dinámico de cirrus (`/data1/aitf_2_3_cache`) y un caché temporal propio (`/data/ceniza/oper/aitf_temporal_cache`).
-3. Corre `lanot-detect-ash` recortado a la región del artículo en lat/lon (`--clip ashpapergeo`), y deja el GeoTIFF en `/data/ceniza/oper/ashpapergeo/`, con su estilo de QGIS (`.qml`) al lado. Con `RECORTE=` (vacío) genera en su lugar el CONUS completo en proyección GOES, en `/data/ceniza/oper/conus/` (~9 s más por escaneo; el recorte tarda ~0.5 s).
+2. Corre CSPP Geo AIT solo con `cmi,acm,actp`, repartido en 24 segmentos de 250 filas × 625 columnas (`-j 24`), con CMIP en 16 procesos. Tarda ~43 s; antes, con 4 segmentos, ~65 s. Se cambia con `FILAS_SEGMENTO`, `COLUMNAS_SEGMENTO`, `TRABAJOS` y `PROCESOS_CMIP`. Usa el caché dinámico de cirrus (`/data1/aitf_2_3_cache`) y un caché temporal propio (`/data/ceniza/oper/aitf_temporal_cache`).
+3. Corre `lanot-detect-ash` recortado a la región del artículo en lat/lon (`--clip ashpapergeo`), y deja el GeoTIFF en `/data/ceniza/oper/ashpapergeo/`, con su estilo de QGIS (`.qml`) al lado. Con `RECORTE=` (vacío) genera en su lugar el CONUS completo en proyección GOES, en `/data/ceniza/oper/conus/` (~1 s más por escaneo, medido el 2026-11-05).
 4. Agrega a `/data/ceniza/oper/latencia_ceniza.csv` el tiempo de cada paso, la latencia total desde el inicio del escaneo y el estado del intento (`ok`, `incompleto`, `error_cspp`, `error_ceniza`).
 
 ## Instalación
