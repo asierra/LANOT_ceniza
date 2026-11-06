@@ -284,9 +284,31 @@ TeraScan no usa ACTP: su script recibe la máscara de nubes de TeraScan, que sol
    - los días sin avisos;
    - los eventos bajo nubes.
 6. Si hace falta un evento fuera de las fechas con ACTP, generarlo con CSPP desde las L1b (bajando GFS y OISST).
-7. Reinstalar en tahan con la configuración nueva de CSPP y medir la latencia de un día completo (ver "Acortar CSPP").
+7. ~~Reinstalar en tahan con la configuración nueva de CSPP~~ (instalado `f86df93` el 2026-11-06 a las 00:12 UTC; los primeros escaneos, 00:11 y 00:16, dieron CSPP 42.8 y 43.4 s y total 237 y 238 s). Falta:
+   - medir el día completo del 2026-11-06 en `latencia_ceniza.csv`: mediana y p95 de `cspp_s` y `total_s`, y que no haya fallas;
+   - comprobar que la cadena polar de tahan no se alentó con los 24 trabajos de CSPP;
+   - si todo va bien, borrar las pruebas de `tahan:~/prueba_cspp/` (1.9 GB).
 8. Preguntar a Víctor:
    - si R04 en porcentaje es lo que se pretendía;
    - si en la evaluación la nube (6) cuenta como "no se sabe" o como "sin ceniza";
    - por qué el LAP dejó de ser una prueba propia (ΔT1 < 3 en TeraScan) y pasó a salir del HAP;
    - si la versión de TeraScan debe seguir como referencia.
+
+## Dónde está cada cosa (para seguir desde otra máquina)
+
+Los datos de la comparación no están en el repositorio. Están en **pegaso** (la máquina donde se hizo el trabajo del 2026-11-05):
+
+- `/data/ceniza/terascan/` (5.2 GB):
+  - `centromex/`: GeoTIFF de TeraScan del día de prueba y de los 16 días;
+  - `terascan_lista.txt`: lista del archivo de TeraScan;
+  - `piloto_20261102/`: salidas del día de prueba;
+  - `muestra/`: salidas de los 16 días y `escaneos.csv`;
+  - `tiempos_20261104.txt`: tiempos de los registros de TeraScan;
+  - copia del script y las configuraciones de TeraScan.
+- `/data/ceniza/vaac/`: avisos del VAAC (`avisos/`, `avisos_popocatepetl.csv`), `dias_2026.csv`, y disponibilidad de L1b y L2 en tahan.
+
+En **tahan**:
+- `~/comparacion_terascan/`: carpetas de enlaces a los L2 y corridas de `reglas_terascan.py`;
+- `~/prueba_cspp/`: pruebas de CSPP.
+
+Para seguir desde otra máquina hay que copiar `/data/ceniza/terascan` y `/data/ceniza/vaac` desde pegaso. Los avisos del VAAC también se pueden volver a bajar con `herramientas/avisos_vaac.py` (los que ya estén no se vuelven a pedir).
