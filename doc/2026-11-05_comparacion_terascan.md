@@ -195,6 +195,21 @@ Para cada día, `reglas_terascan.py --r04 0.003 --nube acm3` en tahan (`scripts/
 
 ## Velocidad (2026-11-05)
 
+**Resumen.** Desde el 2026-11-06 a las 00:12 UTC, con CSPP en 24 segmentos (ver "Acortar CSPP"), la nuestra iguala a TeraScan sin dejar la fase de nube. Mediana desde el inicio del escaneo:
+
+| tramo | TeraScan | nuestra antes | nuestra ahora |
+|---|---|---|---|
+| barrido del CONUS y llegada de los datos | ~184 s | ~184 s | ~184 s |
+| preparación: bandas y nubes | ~33 s (ingesta y máscara propia, sin fase) | ~65 s (CSPP: ACM y ACTP) | ~43 s (CSPP en 24 segmentos, misma ACM y ACTP) |
+| algoritmo de ceniza y salida | ~19 s (CONUS, recorte y exportación) | ~1 s | ~1 s |
+| **total** | **~236 s** | **~259 s** | **~237 s** |
+
+- **El ~80 % del tiempo es la espera de los datos** (barrido del CONUS, ~2.5 min, más la transmisión), igual para los dos.
+- **De lo que sí controlamos, casi todo es CSPP,** que procesa el CONUS completo porque no permite trabajar solo una región. Nuestro algoritmo de ceniza tarda ~1 s (2 s en CONUS completo), contra ~16 s del de TeraScan.
+- "Ahora" son los dos primeros escaneos (00:11 y 00:16 UTC del 2026-11-06); falta confirmarlo con un día completo (ver "Pendiente").
+
+Detalle de las mediciones del 2026-11-04, antes del cambio:
+
 **TeraScan.** Datos de los registros de cada paso (`/opt/terascan/pass/logfiles/pprocs/`) para los 251 escaneos del 2026-11-04 que llegaron a GeoTIFF (de 288). Segundos desde el inicio del escaneo, mediana:
 
 | paso | empieza | termina | dura |
@@ -222,11 +237,11 @@ Para cada día, `reglas_terascan.py --r04 0.003 --nube acm3` en tahan (`scripts/
 | `--clip centromexgeo` (región de TeraScan) | 1.1 s | 400 MB |
 | CONUS completo, sin recorte | 2.1 s | 830 MB |
 
-- **De punta a punta, TeraScan es unos 23 s más rápido:** 236 s contra 259 s. Los datos llegan a las dos máquinas a la misma hora (~184 s).
+- **Antes del cambio, TeraScan era unos 23 s más rápido de punta a punta:** 236 s contra 259 s. Los datos llegan a las dos máquinas a la misma hora (~184 s).
 - **La diferencia está antes del algoritmo.** TeraScan ingiere las L1b y hace su máscara de nubes en ~33 s; CSPP tarda ~65 s, porque calcula ACM y la fase de nube (ACTP), que es más elaborada.
 - **Nuestro paso de ceniza es más rápido que el de TeraScan.** Recortado tarda 1 s, y en CONUS completo 2 s. TeraScan tarda unos 16 s entre clasificación, recorte y exportación. TeraScan clasifica todo el CONUS y luego recorta; la nuestra recorta antes de clasificar.
 - **Escaneos completos ese día:** TeraScan generó GeoTIFF en 251 de 288 escaneos (87 %); la nuestra, en los 288.
-- `operacion/README.md` dice que el CONUS completo tarda ~9 s más que el recorte. Hoy medí 1 s más (2.1 contra 1.1 s); falta ver si esa nota es de antes de las mejoras de octubre.
+- `operacion/README.md` decía que el CONUS completo tardaba ~9 s más que el recorte; medido el 2026-11-05, es 1 s más (2.1 contra 1.1 s). Ya se corrigió en el README y en `procesa_ceniza.sh`.
 
 ### Acortar CSPP (2026-11-05)
 
