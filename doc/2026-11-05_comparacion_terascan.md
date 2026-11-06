@@ -15,7 +15,7 @@ En terascan (`teradm@132.247.103.142`) la cadena es:
 2. `configproc/grb.abi.ash.new.recote.centromex`: remapeo a la región `cenizas_1km` (vecino más cercano).
 3. `configproc/grb.abi.ash.new.recote.centromex.geotiff`: exportación a `products/exportadas/geotiff/cenizas2/centromex/`.
 
-El script `/opt/terascan/pass/postprocs/ash_new_m8_altura` es idéntico a `~teradm/backups/pass/postprocs/ash_new_m8_altura`, del **2024-08-10**. Se copió a `/opt/terascan` el 2025-04-07, con el cambio a GOES-19, y no ha cambiado desde entonces. Es anterior a la versión del artículo. Hay copia del script y de las tres configuraciones en `/data/ceniza/terascan/`.
+El script `/opt/terascan/pass/postprocs/ash_new_m8_altura` es idéntico a `~teradm/backups/pass/postprocs/ash_new_m8_altura`, del **2024-08-10**. Se copió a `/opt/terascan` el 2025-04-07, con el cambio a GOES-19, y no ha cambiado desde entonces. Es anterior a la versión del artículo. Hay copia del script y de las tres configuraciones en `tahan:/data/ceniza/comparacion_terascan/terascan/`.
 
 ### Reglas
 
@@ -42,7 +42,7 @@ Son expresiones de `emathp`. Con ΔT1 = BT13 − BT15, ΔT2 = BT11 − BT13 y Δ
 
 ### Archivo
 
-`ls -f` del directorio (2026-11-05): 140 728 GeoTIFF de ceniza, del 2025-04-07 al día de hoy. Los 123 del 2025-04-07 son de GOES-16; el resto, de GOES-19. Hay de 6 500 a 8 000 por mes, de unos 8 900 posibles. La lista está en `/data/ceniza/terascan/terascan_lista.txt`.
+`ls -f` del directorio (2026-11-05): 140 728 GeoTIFF de ceniza, del 2025-04-07 al día de hoy. Los 123 del 2025-04-07 son de GOES-16; el resto, de GOES-19. Hay de 6 500 a 8 000 por mes, de unos 8 900 posibles. La lista está en `tahan:/data/ceniza/comparacion_terascan/terascan/terascan_lista.txt`.
 
 ## Cómo se compara
 
@@ -123,7 +123,7 @@ Ceniza = clases 1 a 4. "±1 px": cuenta como coincidencia si hay ceniza del otro
   - **Reglas, en despejado (52 %):** casi todo es LAP. El LAP de TeraScan es una prueba propia con ΔT1 < 3 y ΔT2 > −1. El nuestro solo sale del HAP (ΔT1 < 1) cuando −1.5 ≤ ΔT2 < −1, así que la franja 1 ≤ ΔT1 < 3 no da LAP nunca. El HAP en despejado que nos falta (45) no lo explican las reglas: con fase despejado, nuestro HAP usa los mismos umbrales (el R04 nuestro es incluso más permisivo). Puede venir de la ubicación de la fase (vecino más cercano en la rejilla de TeraScan) o de los datos; falta verificarlo con los valores de cada píxel.
 - Las dos son diferencias de criterio, no errores. Cuál acierta más se decide con CENAPRED.
 
-Archivos: GeoTIFF de TeraScan en `/data/ceniza/terascan/centromex/`; salidas nuestras en `/data/ceniza/terascan/piloto_20261102/`; corridas en `tahan:~/comparacion_terascan/`.
+Archivos: GeoTIFF de TeraScan en `tahan:/data/ceniza/comparacion_terascan/terascan/centromex/`; salidas nuestras en `tahan:/data/ceniza/comparacion_terascan/piloto_20261102/`.
 
 ## Muestra (2026-11-05)
 
@@ -135,14 +135,14 @@ Archivos: GeoTIFF de TeraScan en `/data/ceniza/terascan/centromex/`; salidas nue
 
 ### Avisos del VAAC de Washington
 
-`herramientas/avisos_vaac.py` bajó los 947 avisos del Popocatépetl de 2025 y 2026 a `/data/ceniza/vaac/` y los resume en `avisos_popocatepetl.csv`. Cada aviso trae:
+`herramientas/avisos_vaac.py` bajó los 947 avisos del Popocatépetl de 2025 y 2026 a `tahan:/data/ceniza/comparacion_terascan/vaac/` y los resume en `avisos_popocatepetl.csv`. Cada aviso trae:
 - hora de observación en UTC;
 - si el satélite vio la ceniza (`OBS VA CLD` con área), si solo se estimó (`EST VA CLD`: la vio una cámara pero el satélite no, casi siempre por nubes) o si no se identificó;
 - fuentes: GOES, cámara, modelos, VOLCAT.
 
 Los analistas usan las mismas imágenes de GOES, así que no es una referencia independiente del todo.
 
-`/data/ceniza/vaac/dias_2026.csv` resume cada día de 2026: escaneos con L2 y de TeraScan, número de avisos, horas de ceniza observada y estimada. Con L2 y TeraScan hay:
+`tahan:/data/ceniza/comparacion_terascan/vaac/dias_2026.csv` resume cada día de 2026: escaneos con L2 y de TeraScan, número de avisos, horas de ceniza observada y estimada. Con L2 y TeraScan hay:
 - 46 días con ceniza vista por el satélite;
 - 2 con ceniza solo estimada;
 - 37 sin avisos ese día ni el anterior ni el siguiente.
@@ -153,7 +153,7 @@ Los días con ceniza estimada casi todos son de mayo a agosto (temporada de lluv
 
 ### Días elegidos
 
-16 días; la lista está en `/data/ceniza/terascan/muestra/dias.txt`.
+16 días; la lista está en `tahan:/data/ceniza/comparacion_terascan/muestra/dias.txt`.
 
 | grupo | días |
 |---|---|
@@ -161,11 +161,11 @@ Los días con ceniza estimada casi todos son de mayo a agosto (temporada de lluv
 | con ceniza estimada (nubes) | 2026-01-14, 02-06, 09-16 (solo estimada), 09-23, 10-27, 11-04 |
 | sin avisos | 2026-01-17, 02-03, 09-07, 10-05 |
 
-Para cada día, `reglas_terascan.py --r04 0.003 --nube acm3` en tahan (`~/comparacion_terascan/muestra/`) y los GeoTIFF de TeraScan en `/data/ceniza/terascan/centromex/`.
+Para cada día, `reglas_terascan.py --r04 0.003 --nube acm3` en tahan (`scripts/corre_dia.sh`; salidas en `tahan:/data/ceniza/comparacion_terascan/muestra/AAAAjjj/`) y los GeoTIFF de TeraScan en `tahan:/data/ceniza/comparacion_terascan/terascan/centromex/`.
 
 ### Resultados (2026-11-05)
 
-`herramientas/evalua_muestra.py`: 3 869 escaneos con las tres salidas. Ceniza = clases 1 a 3. "Ve ceniza" = al menos 1 píxel a menos de 100 km del volcán. El detalle por escaneo está en `/data/ceniza/terascan/muestra/escaneos.csv`.
+`herramientas/evalua_muestra.py`: 3 869 escaneos con las tres salidas. Ceniza = clases 1 a 3. "Ve ceniza" = al menos 1 píxel a menos de 100 km del volcán. El detalle por escaneo está en `tahan:/data/ceniza/comparacion_terascan/muestra/escaneos.csv`.
 
 **Avisos del VAAC** (algún escaneo con ceniza a ±15 min de la observación):
 
@@ -269,7 +269,7 @@ TeraScan no usa ACTP: su script recibe la máscara de nubes de TeraScan, que sol
 
 **El pronóstico numérico cambia el resultado, no la partición.** La configuración actual, corrida dos veces con dos horas de diferencia, dio máscaras distintas en 61 513 píxeles (755 en la región), porque entre una y otra llegaron al caché un RAP (17:30) y un GFS (17:54) nuevos, y CSPP usa el más reciente. Comparadas con una corrida de la misma hora, las tres particiones dan el mismo ACM y BCM. La fase difiere en 1 a 8 píxeles de todo el CONUS, ninguno en la región. Consecuencia: reprocesar un escaneo horas después puede dar un producto algo distinto al de la operación.
 
-**Aplicado en `operacion/procesa_ceniza.sh`** (6 × 4, `TRABAJOS=24`, `PROCESOS_CMIP=16`; se cambian con variables de entorno). Probado en tahan con `BASE` propio: CSPP tardó 41.9 s y el escaneo quedó `ok`. La latencia debería bajar de ~259 a ~236 s, casi la de TeraScan. Falta reinstalar en tahan (`git pull && operacion/instala.sh`) y medir un día completo. Las corridas de prueba están en `tahan:~/prueba_cspp/`.
+**Aplicado en `operacion/procesa_ceniza.sh`** (6 × 4, `TRABAJOS=24`, `PROCESOS_CMIP=16`; se cambian con variables de entorno). Probado en tahan con `BASE` propio: CSPP tardó 41.9 s y el escaneo quedó `ok`. La latencia debería bajar de ~259 a ~236 s, casi la de TeraScan. Falta reinstalar en tahan (`git pull && operacion/instala.sh`) y medir un día completo. Las corridas de prueba están en `tahan:/data/ceniza/comparacion_terascan/velocidad/cspp/`.
 
 ## Pendiente
 
@@ -287,28 +287,25 @@ TeraScan no usa ACTP: su script recibe la máscara de nubes de TeraScan, que sol
 7. ~~Reinstalar en tahan con la configuración nueva de CSPP~~ (instalado `f86df93` el 2026-11-06 a las 00:12 UTC; los primeros escaneos, 00:11 y 00:16, dieron CSPP 42.8 y 43.4 s y total 237 y 238 s). Falta:
    - medir el día completo del 2026-11-06 en `latencia_ceniza.csv`: mediana y p95 de `cspp_s` y `total_s`, y que no haya fallas;
    - comprobar que la cadena polar de tahan no se alentó con los 24 trabajos de CSPP;
-   - si todo va bien, borrar las pruebas de `tahan:~/prueba_cspp/` (1.9 GB).
+   - si todo va bien, borrar las pruebas de `tahan:/data/ceniza/comparacion_terascan/velocidad/cspp/` (1.9 GB).
 8. Preguntar a Víctor:
    - si R04 en porcentaje es lo que se pretendía;
    - si en la evaluación la nube (6) cuenta como "no se sabe" o como "sin ceniza";
    - por qué el LAP dejó de ser una prueba propia (ΔT1 < 3 en TeraScan) y pasó a salir del HAP;
    - si la versión de TeraScan debe seguir como referencia.
 
-## Dónde está cada cosa (para seguir desde otra máquina)
+## Dónde está cada cosa
 
-Los datos de la comparación no están en el repositorio. Están en **pegaso** (la máquina donde se hizo el trabajo del 2026-11-05):
+Los datos de la comparación no están en el repositorio. Están en **tahan:/data/ceniza/comparacion_terascan/** (grupo `ash`), que se ve desde cualquier máquina con acceso a tahan:
 
-- `/data/ceniza/terascan/` (5.2 GB):
-  - `centromex/`: GeoTIFF de TeraScan del día de prueba y de los 16 días;
-  - `terascan_lista.txt`: lista del archivo de TeraScan;
-  - `piloto_20261102/`: salidas del día de prueba;
-  - `muestra/`: salidas de los 16 días y `escaneos.csv`;
-  - `tiempos_20261104.txt`: tiempos de los registros de TeraScan;
-  - copia del script y las configuraciones de TeraScan.
-- `/data/ceniza/vaac/`: avisos del VAAC (`avisos/`, `avisos_popocatepetl.csv`), `dias_2026.csv`, y disponibilidad de L1b y L2 en tahan.
+| carpeta | contenido |
+|---|---|
+| `terascan/` | GeoTIFF de TeraScan (`centromex/`, día de prueba y los 16 días); `terascan_lista.txt`, la lista del archivo de TeraScan; `plantilla.tif`, su rejilla; copia del script `ash_new_m8_altura` y de las tres configuraciones |
+| `vaac/` | avisos del VAAC (`avisos/`, `avisos_popocatepetl.csv`), `dias_2026.csv`, y disponibilidad de L1b y L2 en tahan |
+| `l2/` | una carpeta por día (`2026jjj/`) con enlaces a los L2 de `/depot` (los 8 productos que usa `reglas_terascan.py`) |
+| `piloto_20261102/` | día de prueba: salidas de la operación (`nuestra/`), de `reglas_terascan.py` con R04 0.3 y 0.003 y con las tres máscaras, y la fase ACTP en la rejilla de TeraScan (`fase/`) |
+| `muestra/` | los 16 días (`2026jjj/terascan_py`, `2026jjj/nuestra`), `dias.txt`, `escaneos.csv` |
+| `scripts/` | `corre_dia.sh` (corre la muestra de un día), `fase_en_rejilla.py`, y la copia de `reglas_terascan.py` que se usó |
+| `velocidad/` | tiempos de TeraScan y de la operación del 2026-11-04; pruebas de CSPP (`cspp/`) y del paso de ceniza (`detect_ash/`) |
 
-En **tahan**:
-- `~/comparacion_terascan/`: carpetas de enlaces a los L2 y corridas de `reglas_terascan.py`;
-- `~/prueba_cspp/`: pruebas de CSPP.
-
-Para seguir desde otra máquina hay que copiar `/data/ceniza/terascan` y `/data/ceniza/vaac` desde pegaso. Los avisos del VAAC también se pueden volver a bajar con `herramientas/avisos_vaac.py` (los que ya estén no se vuelven a pedir).
+Para correr la muestra de otro día: `scripts/corre_dia.sh JJJ`, con `JJJ` el día juliano de 2026. Para evaluarla, desde cualquier máquina con el repositorio y acceso a esa carpeta: `herramientas/evalua_muestra.py --terascan .../terascan/centromex --muestra .../muestra --avisos .../vaac/avisos_popocatepetl.csv`.

@@ -10,7 +10,7 @@ por los datos de entrada. Escribe dos carpetas en DIR:
     nuestra/ceniza_INSTANTE.tif       classify_ash (perfil del Popocatépetl) sobre los mismos datos
 
 Las reglas son las del script de TeraScan `ash_new_m8_altura` (agosto de 2024; copia en
-/data/ceniza/terascan/ y descripción en doc/2026-11-05_comparacion_terascan.md):
+tahan:/data/ceniza/comparacion_terascan/terascan/ y descripción en doc/2026-11-05_comparacion_terascan.md):
 
     ΔT1 = BT13 − BT15    ΔT2 = BT11 − BT13    ΔT3 = BT07 − BT13
     noche (SZA > 85):        CA  ΔT1 < 0, ΔT2 > 0,    ΔT3 > 2

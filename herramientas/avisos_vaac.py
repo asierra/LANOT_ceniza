@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Baja y resume los avisos de ceniza (VAA) del VAAC de Washington para el Popocatépetl.
 
-    herramientas/avisos_vaac.py --carpeta /data/ceniza/vaac 2025 2026
+    herramientas/avisos_vaac.py --carpeta /data/ceniza/comparacion_terascan/vaac 2025 2026
 
 Para cada año lee el archivo de avisos de NOAA (ospo.noaa.gov/products/atmosphere/vaac/AAAA.html),
 baja el texto de cada aviso del Popocatépetl a CARPETA/avisos/ (los que ya estén no se vuelven
