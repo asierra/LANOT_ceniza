@@ -94,7 +94,7 @@ Los umbrales se cambian con `MAX_EDAD_MIN` y `MAX_P95_S`. Para agregar después 
 Antes de instalarlo, comprobar como `aguilars` en tahan:
 
 ```bash
-ssh -o BatchMode=yes teradm@132.247.103.142 'ls -d /opt/terascan/products/exportadas/geotiff/cenizas2/centromex'
+ssh -o BatchMode=yes teradm@132.247.103.142 'ls -d /nexus/data1/products/exportadas/geotiff/cenizas2/centromex'
 ```
 
 Si la ruta es otra, se ajusta `ORIGEN_DIR` en el crontab. La línea del cron (en `crontab.ejemplo`, comentada) va en `crontab -e` de `aguilars`.

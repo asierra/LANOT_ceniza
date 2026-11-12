@@ -16,7 +16,7 @@
 set -euo pipefail
 
 TERASCAN=${TERASCAN:-teradm@132.247.103.142}
-ORIGEN_DIR=${ORIGEN_DIR:-/opt/terascan/products/exportadas/geotiff/cenizas2/centromex}
+ORIGEN_DIR=${ORIGEN_DIR:-/nexus/data1/products/exportadas/geotiff/cenizas2/centromex}
 DESTINO=${DESTINO:-/data/ceniza/terascan/centromex}
 MIN_EDAD_MIN=${MIN_EDAD_MIN:-30}
 BWLIMIT=${BWLIMIT:-20m}                  # para rsync --bwlimit (20 MB/s)

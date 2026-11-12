@@ -13,7 +13,7 @@ En terascan (`teradm@132.247.103.142`) la cadena es:
 
 1. `configproc/grb.abi.ash.new2`: función `ash_new_m8_altura` sobre las L1b de TeraScan y su máscara de nubes; escribe en `products/tdf/whole_pass/abi/conus/ash3`.
 2. `configproc/grb.abi.ash.new.recote.centromex`: remapeo a la región `cenizas_1km` (vecino más cercano).
-3. `configproc/grb.abi.ash.new.recote.centromex.geotiff`: exportación a `products/exportadas/geotiff/cenizas2/centromex/`.
+3. `configproc/grb.abi.ash.new.recote.centromex.geotiff`: exportación a `/nexus/data1/products/exportadas/geotiff/cenizas2/centromex/`.
 
 El script `/opt/terascan/pass/postprocs/ash_new_m8_altura` es idéntico a `~teradm/backups/pass/postprocs/ash_new_m8_altura`, del **2024-08-10**. Se copió a `/opt/terascan` el 2025-04-07, con el cambio a GOES-19, y no ha cambiado desde entonces. Es anterior a la versión del artículo. Hay copia del script y de las tres configuraciones en `tahan:/data/ceniza/comparacion_terascan/terascan/`.
 
