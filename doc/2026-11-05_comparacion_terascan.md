@@ -308,7 +308,7 @@ TeraScan no usa ACTP: su script recibe la máscara de nubes de TeraScan, que sol
    - si en la evaluación la nube (6) cuenta como "no se sabe" o como "sin ceniza";
    - por qué el LAP dejó de ser una prueba propia (ΔT1 < 3 en TeraScan) y pasó a salir del HAP;
    - si la versión de TeraScan debe seguir como referencia.
-9. Respaldar el producto de TeraScan antes de que se pierda: `operacion/respalda_terascan.sh`, diario, a `tahan:/data/ceniza/terascan/centromex/` (ver `operacion/README.md`). Falta comprobar el acceso de `lanotadm@tahan` a `teradm@132.247.103.142` y la ruta completa del origen, correr a mano la primera copia (~165 GB) e instalar el cron.
+9. Respaldar el producto de TeraScan antes de que se pierda: `operacion/respalda_terascan.sh`, diario, a `tahan:/data/ceniza/terascan/centromex/` (ver `operacion/README.md`). Corre con la cuenta `aguilars` (`lanotadm@tahan` no entra a TeraScan). Falta comprobar la ruta completa del origen, correr a mano la primera copia (~165 GB) e instalar el cron de `aguilars`.
 
 ## Dónde está cada cosa
 

@@ -8,6 +8,6 @@
 # Vigilante: estado en /data/ceniza/oper/state/estado.json y cambios en state/eventos.log.
 2-59/15 * * * * /opt/lanot/ceniza/operacion/vigila_ceniza.sh
 # Respaldo diario de los GeoTIFF de ceniza de TeraScan (referencia para la comparación).
-# Requiere ssh con llave de lanotadm@tahan a teradm@132.247.103.142. Log en
-# /var/log/lanot/ceniza/respalda_terascan_AAAAMM.log.
-17 3 * * *      /opt/lanot/ceniza/operacion/respalda_terascan.sh
+# Va en el crontab de aguilars, NO en el de lanotadm: lanotadm@tahan no entra a
+# teradm@132.247.103.142. Log en /data/ceniza/terascan/log/respalda_terascan_AAAAMM.log.
+# 17 3 * * *      /opt/lanot/ceniza/operacion/respalda_terascan.sh

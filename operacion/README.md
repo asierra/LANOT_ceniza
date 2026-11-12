@@ -88,15 +88,16 @@ Los umbrales se cambian con `MAX_EDAD_MIN` y `MAX_P95_S`. Para agregar después 
 - Copia solo archivos con más de 30 min (`MIN_EDAD_MIN`), para no llevarse uno a medio escribir.
 - El origen se cambia con `TERASCAN` (cuenta y servidor) y `ORIGEN_DIR`; el destino, con `DESTINO`.
 - La primera corrida trae todo el archivo (~140 000 archivos, ~165 GB) a 20 MB/s como máximo (`BWLIMIT`): unas 2.5 h. Conviene correrla a mano una vez, fuera de horas de trabajo; si el cron la encuentra en curso, sale sin hacer nada.
-- Log: `/var/log/lanot/ceniza/respalda_terascan_AAAAMM.log`, una línea por corrida (`en origen`, `copiados`, `en respaldo`).
+- Log: `/data/ceniza/terascan/log/respalda_terascan_AAAAMM.log`, una línea por corrida (`en origen`, `copiados`, `en respaldo`). Si la cuenta que lo corre puede escribir en `/var/log/lanot/ceniza`, va ahí.
+- Corre con la cuenta `aguilars`, no con `lanotadm`, que no entra a TeraScan. La primera corrida crea `/data/ceniza/terascan/` con grupo `ash` y setgid, para que lo respaldado sea del grupo.
 
-Antes de instalarlo, comprobar como `lanotadm` en tahan:
+Antes de instalarlo, comprobar como `aguilars` en tahan:
 
 ```bash
 ssh -o BatchMode=yes teradm@132.247.103.142 'ls -d /opt/terascan/products/exportadas/geotiff/cenizas2/centromex'
 ```
 
-Si no entra sin contraseña, hay que poner la llave de `lanotadm@tahan` en `teradm`. Si la ruta es otra, se ajusta `ORIGEN_DIR` en el crontab.
+Si la ruta es otra, se ajusta `ORIGEN_DIR` en el crontab. La línea del cron (en `crontab.ejemplo`, comentada) va en `crontab -e` de `aguilars`.
 
 ## Prueba del 2026-10-18 (escaneo de 21:31 UTC)
 

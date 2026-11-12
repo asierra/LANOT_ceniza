@@ -12,6 +12,7 @@
 # archivo (~140 000 archivos, ~165 GB) con el ancho de banda limitado a BWLIMIT.
 #
 # Requisito: la cuenta que corre el script entra sin contraseña a TERASCAN (ssh con llave).
+# lanotadm@tahan no entra; corre en el crontab de aguilars, que está en el grupo ash.
 set -euo pipefail
 
 TERASCAN=${TERASCAN:-teradm@132.247.103.142}
@@ -21,10 +22,17 @@ MIN_EDAD_MIN=${MIN_EDAD_MIN:-30}
 BWLIMIT=${BWLIMIT:-20m}                  # para rsync --bwlimit (20 MB/s)
 
 umask 0002
-mkdir -p "$DESTINO"
+GRUPO=${GRUPO:-ash}                      # grupo de lo respaldado (setgid en las carpetas)
+if [ ! -d "$DESTINO" ]; then
+    mkdir -p "$DESTINO"
+    chgrp "$GRUPO" "$DESTINO" "$(dirname "$DESTINO")" && chmod g+s "$DESTINO" "$(dirname "$DESTINO")" \
+        || echo "AVISO: no pude poner el grupo $GRUPO en $DESTINO" >&2
+fi
 
 # Log mensual. En una terminal la salida se queda en pantalla; desde cron va al log.
+# /var/log/lanot/ceniza es de lanotadm: con otra cuenta, el log va junto al respaldo.
 LOGDIR=${LOGDIR:-/var/log/lanot/ceniza}
+[ -w "$LOGDIR" ] || LOGDIR=$(dirname "$DESTINO")/log
 if [ ! -t 1 ] && mkdir -p "$LOGDIR" 2>/dev/null; then
     exec >> "$LOGDIR/respalda_terascan_$(date -u +%Y%m).log" 2>&1
     find "$LOGDIR" -name 'respalda_terascan_*.log' -mtime +400 -delete
