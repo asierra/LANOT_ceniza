@@ -206,7 +206,7 @@ Para cada día, `reglas_terascan.py --r04 0.003 --nube acm3` en tahan (`scripts/
 
 - **El ~80 % del tiempo es la espera de los datos** (barrido del CONUS, ~2.5 min, más la transmisión), igual para los dos.
 - **De lo que sí controlamos, casi todo es CSPP,** que procesa el CONUS completo porque no permite trabajar solo una región. Nuestro algoritmo de ceniza tarda ~1 s (2 s en CONUS completo), contra ~16 s del de TeraScan.
-- "Ahora" son los dos primeros escaneos (00:11 y 00:16 UTC del 2026-11-06); falta confirmarlo con un día completo (ver "Pendiente").
+- "Ahora" está confirmado con los días completos del 2026-11-06 al 11-11 (310 a 315): CSPP 42.1–43.0 s de mediana (p95 ≤ 47 s), total 237.3–238.5 s (p95 ≤ 241.8 s). Antes (días 300 a 309): CSPP ~64.5 s, total ~259.5 s.
 
 Detalle de las mediciones del 2026-11-04, antes del cambio:
 
@@ -284,7 +284,7 @@ TeraScan no usa ACTP: su script recibe la máscara de nubes de TeraScan, que sol
 
 **El pronóstico numérico cambia el resultado, no la partición.** La configuración actual, corrida dos veces con dos horas de diferencia, dio máscaras distintas en 61 513 píxeles (755 en la región), porque entre una y otra llegaron al caché un RAP (17:30) y un GFS (17:54) nuevos, y CSPP usa el más reciente. Comparadas con una corrida de la misma hora, las tres particiones dan el mismo ACM y BCM. La fase difiere en 1 a 8 píxeles de todo el CONUS, ninguno en la región. Consecuencia: reprocesar un escaneo horas después puede dar un producto algo distinto al de la operación.
 
-**Aplicado en `operacion/procesa_ceniza.sh`** (6 × 4, `TRABAJOS=24`, `PROCESOS_CMIP=16`; se cambian con variables de entorno). Probado en tahan con `BASE` propio: CSPP tardó 41.9 s y el escaneo quedó `ok`. La latencia debería bajar de ~259 a ~236 s, casi la de TeraScan. Falta reinstalar en tahan (`git pull && operacion/instala.sh`) y medir un día completo. Las corridas de prueba están en `tahan:/data/ceniza/comparacion_terascan/velocidad/cspp/`.
+**Aplicado en `operacion/procesa_ceniza.sh`** (6 × 4, `TRABAJOS=24`, `PROCESOS_CMIP=16`; se cambian con variables de entorno). Probado en tahan con `BASE` propio: CSPP tardó 41.9 s y el escaneo quedó `ok`. La latencia debería bajar de ~259 a ~236 s, casi la de TeraScan. Instalado en tahan el 2026-11-06 y medido en días completos (ver "Velocidad" y el punto 7 de "Pendiente"). Las corridas de prueba se borraron el 2026-11-12; en `tahan:/data/ceniza/comparacion_terascan/velocidad/cspp/` solo queda `procesa_ceniza_nuevo.sh`.
 
 ## Pendiente
 
@@ -299,10 +299,10 @@ TeraScan no usa ACTP: su script recibe la máscara de nubes de TeraScan, que sol
    - los días sin avisos;
    - los eventos bajo nubes.
 6. Si hace falta un evento fuera de las fechas con ACTP, generarlo con CSPP desde las L1b (bajando GFS y OISST).
-7. ~~Reinstalar en tahan con la configuración nueva de CSPP~~ (instalado `f86df93` el 2026-11-06 a las 00:12 UTC; los primeros escaneos, 00:11 y 00:16, dieron CSPP 42.8 y 43.4 s y total 237 y 238 s). Falta:
-   - medir el día completo del 2026-11-06 en `latencia_ceniza.csv`: mediana y p95 de `cspp_s` y `total_s`, y que no haya fallas;
-   - comprobar que la cadena polar de tahan no se alentó con los 24 trabajos de CSPP;
-   - si todo va bien, borrar las pruebas de `tahan:/data/ceniza/comparacion_terascan/velocidad/cspp/` (1.9 GB).
+7. ~~Reinstalar en tahan con la configuración nueva de CSPP~~ (instalado `f86df93` el 2026-11-06 a las 00:12 UTC). Revisado el 2026-11-12:
+   - días 310 a 315 completos en `latencia_ceniza.csv`: CSPP 42.1–43.0 s de mediana (p95 ≤ 47 s), total 237.3–238.5 s (p95 ≤ 241.8 s), contra ~64.5 y ~259.5 s antes. Ningún escaneo con falla y ninguna alerta en `state/eventos.log` desde el 2026-11-04. Faltan dos escaneos (2026-11-09, 10:41 y 10:46 UTC) cuyos L1b nunca llegaron a `/depot`: hueco de recepción, no de la cadena;
+   - la cadena polar no se alentó: CSPP-SDR de VIIRS, mediana antes y después, 471 → 441 s (NOAA-20) y 475 → 430 s (NOAA-21). S-NPP no transmite desde el 2026-11-02;
+   - pruebas de `velocidad/cspp/` borradas (1.9 GB).
 8. Preguntar a Víctor:
    - si R04 en porcentaje es lo que se pretendía;
    - si en la evaluación la nube (6) cuenta como "no se sabe" o como "sin ceniza";
