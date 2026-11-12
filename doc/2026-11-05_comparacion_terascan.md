@@ -294,7 +294,7 @@ TeraScan no usa ACTP: su script recibe la máscara de nubes de TeraScan, que sol
 4. ~~Evaluar la muestra contra los avisos del VAAC~~ (hecho; ver "Resultados"). Mejoras posibles:
    - exigir que la ceniza caiga dentro del área del aviso (los avisos traen el polígono);
    - ver qué son las falsas alarmas lejanas de la nuestra (10-28, 09-01, 09-07).
-5. Pedir a CENAPRED los eventos con ceniza confirmada (hora, tipo, cómo se confirmó) y los días sin ceniza de la muestra, sobre todo:
+5. Pedir a CENAPRED los eventos de 2026 con ceniza confirmada (hora, tipo, cómo se confirmó) y días sin emisión, sobre todo con nubes de hielo o fase mixta sobre la región. Decidido el 2026-11-12: la comparación definitiva se hace con fechas de 2026 y no con los eventos del artículo. Para esos ya no hay producto de TeraScan, solo se podrían comparar sus reglas, y los umbrales se ajustaron con ellos. En 2026 hay producto de TeraScan y L1b y L2 nuestros en tahan. De la muestra, en particular:
    - el 2026-11-02;
    - los días sin avisos;
    - los eventos bajo nubes.
@@ -308,6 +308,7 @@ TeraScan no usa ACTP: su script recibe la máscara de nubes de TeraScan, que sol
    - si en la evaluación la nube (6) cuenta como "no se sabe" o como "sin ceniza";
    - por qué el LAP dejó de ser una prueba propia (ΔT1 < 3 en TeraScan) y pasó a salir del HAP;
    - si la versión de TeraScan debe seguir como referencia.
+9. Respaldar el producto de TeraScan antes de que se pierda: `operacion/respalda_terascan.sh`, diario, a `tahan:/data/ceniza/terascan/centromex/` (ver `operacion/README.md`). Falta comprobar el acceso de `lanotadm@tahan` a `teradm@132.247.103.142` y la ruta completa del origen, correr a mano la primera copia (~165 GB) e instalar el cron.
 
 ## Dónde está cada cosa
 

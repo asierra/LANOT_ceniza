@@ -81,6 +81,23 @@ Los umbrales se cambian con `MAX_EDAD_MIN` y `MAX_P95_S`. Para agregar después 
 
 `lanot-detect-ash` termina con código 0 si todo salió bien, 1 si hubo un error de procesamiento, 2 si los argumentos son inválidos y 3 si faltan datos.
 
+## Respaldo de TeraScan
+
+`respalda_terascan.sh` copia una vez al día los GeoTIFF de ceniza de TeraScan (`*.centromex.tif`) a `/data/ceniza/terascan/centromex/`, tal cual y sin borrar nunca nada. Son la referencia para comparar con nuestra versión (`doc/2026-11-05_comparacion_terascan.md`); TeraScan los conserva desde el 2025-04-07, pero no sabemos hasta cuándo.
+
+- Copia solo archivos con más de 30 min (`MIN_EDAD_MIN`), para no llevarse uno a medio escribir.
+- El origen se cambia con `TERASCAN` (cuenta y servidor) y `ORIGEN_DIR`; el destino, con `DESTINO`.
+- La primera corrida trae todo el archivo (~140 000 archivos, ~165 GB) a 20 MB/s como máximo (`BWLIMIT`): unas 2.5 h. Conviene correrla a mano una vez, fuera de horas de trabajo; si el cron la encuentra en curso, sale sin hacer nada.
+- Log: `/var/log/lanot/ceniza/respalda_terascan_AAAAMM.log`, una línea por corrida (`en origen`, `copiados`, `en respaldo`).
+
+Antes de instalarlo, comprobar como `lanotadm` en tahan:
+
+```bash
+ssh -o BatchMode=yes teradm@132.247.103.142 'ls -d /opt/terascan/products/exportadas/geotiff/cenizas2/centromex'
+```
+
+Si no entra sin contraseña, hay que poner la llave de `lanotadm@tahan` en `teradm`. Si la ruta es otra, se ajusta `ORIGEN_DIR` en el crontab.
+
 ## Prueba del 2026-10-18 (escaneo de 21:31 UTC)
 
 | paso | tahan (esta pasada) | cirrus (cadena completa) |
