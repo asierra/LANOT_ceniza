@@ -1,12 +1,17 @@
 # Publicación del software (SoftwareX o JOSS)
 
+> **Desde el 2026-11-16 el plan del artículo vive en
+> `~/Dropbox/cca/lanot/ceniza/paper/plan_software.md`**, fuera del repo. La lista
+> «Antes de enviar» de abajo se pasó allá y se actualiza allá; esta nota queda
+> como antecedente.
+
 - **Fecha:** 2026-10-21
 - **Estado:** esqueleto en `paper/`. No se envía antes de que se publique el artículo científico.
 - **Revista (2026-10-21):** SoftwareX si pesa más; el borrador de JOSS sirve para ordenar las ideas, como pasó con hpsatviews. Para SoftwareX: molde en `~/lanot/hpsatviews/paper/hpsatviews_softwarex.tex` (tabla de metadatos del código, secciones de impacto y ejemplos).
 
 ## Contexto
 
-hpsatviews no se pudo publicar en JOSS ni en SoftwareX porque no había un artículo científico que usara el software. Aquí sí lo hay: "Ash detection with ABI/GOES-16 images at Popocatépetl volcano, México" (Jiménez-Escudero, Gómez-Rodríguez, Nieto-Torres, Martin-Del-Pozzo, Aguilar-Sierra y Prado-Molina), que presenta el algoritmo ABI-Popocatépetl. Todos sus resultados se hicieron con este paquete (versión `90ad79f`). Manuscrito vigente: `~/Dropbox/cca/lanot/ceniza/fase2/Jimenez et al Ash detection REV.docx`. Se empieza con JOSS por ser el más corto; el borrador sirve también para ordenar ideas si después se elige SoftwareX.
+JOSS rechazó hpsatviews porque no había un artículo científico que usara el software. Solo se envió a JOSS; a SoftwareX nunca se mandó (corregido el 2026-11-16). Aquí sí lo hay: "Ash detection with ABI/GOES-16 images at Popocatépetl volcano, México" (Jiménez-Escudero, Gómez-Rodríguez, Nieto-Torres, Martin-Del-Pozzo, Aguilar-Sierra y Prado-Molina), que presenta el algoritmo ABI-Popocatépetl. Todos sus resultados se hicieron con este paquete (versión `90ad79f`). Manuscrito vigente: `~/Dropbox/cca/lanot/ceniza/fase2/Jimenez et al Ash detection REV.docx`. Se empieza con JOSS por ser el más corto; el borrador sirve también para ordenar ideas si después se elige SoftwareX.
 
 **Autores:** Alejandro Aguilar Sierra (implementación; primer autor) y Víctor Manuel Jiménez Escudero (autor del algoritmo, del artículo y de la versión previa en TeraScan).
 
